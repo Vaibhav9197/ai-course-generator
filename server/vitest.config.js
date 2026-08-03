@@ -6,8 +6,10 @@ export default defineConfig({
     globals: false,
     include: ['tests/**/*.test.js', '**/*.test.js'],
     exclude: ['node_modules/**'],
-    // mongodb-memory-server downloads a binary on first run in CI.
     testTimeout: 30_000,
-    hookTimeout: 60_000,
+    // Generous because mongodb-memory-server downloads a ~600MB MongoDB binary the
+    // first time it runs on a machine (and on a cold CI cache). Subsequent runs start
+    // in a second or two from the local binary cache.
+    hookTimeout: 300_000,
   },
 });
