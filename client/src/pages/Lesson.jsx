@@ -15,6 +15,7 @@ import { Link, useParams } from 'react-router-dom';
 import { FiChevronLeft, FiChevronRight, FiTarget } from 'react-icons/fi';
 import { useFetch } from '../hooks/useApi.js';
 import LessonRenderer from '../components/LessonRenderer.jsx';
+import LessonPDFExporter from '../components/LessonPDFExporter.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
 import ErrorMessage from '../components/ErrorMessage.jsx';
 
@@ -70,9 +71,18 @@ export default function Lesson() {
             )}
           </HStack>
 
-          <Heading size="2xl" lineHeight="1.2">
-            {lesson.title}
-          </Heading>
+          <HStack justify="space-between" align="start" gap="4">
+            <Heading size="2xl" lineHeight="1.2">
+              {lesson.title}
+            </Heading>
+            <HStack gap="2" flexShrink={0} pt="1">
+              <LessonPDFExporter
+                lesson={lesson}
+                courseTitle={context?.courseTitle}
+                moduleTitle={context?.moduleTitle}
+              />
+            </HStack>
+          </HStack>
         </Stack>
 
         {lesson.objectives?.length > 0 && (

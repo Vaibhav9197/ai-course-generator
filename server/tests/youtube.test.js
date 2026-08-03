@@ -64,6 +64,13 @@ describe('normalizeQuery', () => {
   it('keeps genuinely different queries distinct', () => {
     expect(normalizeQuery('react hooks')).not.toBe(normalizeQuery('vue hooks'));
   });
+
+  it('preserves combining marks in non-Latin scripts', () => {
+    // Devanagari vowel signs are \p{M}, not \p{L}. Stripping them would reduce "हिंदी" to
+    // "हद" and collapse distinct queries onto one cache key, serving the wrong video.
+    expect(normalizeQuery('हिंदी में सीखें')).toBe('हिंदी में सीखें');
+    expect(normalizeQuery('हिंदी')).not.toBe(normalizeQuery('हद'));
+  });
 });
 
 describe('resolveVideo', () => {

@@ -331,7 +331,8 @@ function normalizeBlock(block, warnings) {
       if (/^https?:\/\//i.test(block.query) || /youtu\.?be/i.test(block.query)) {
         const recovered = block.query
           .replace(/https?:\/\/\S+/gi, ' ')
-          .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+          // \p{M} keeps combining marks, which carry meaning in non-Latin scripts.
+          .replace(/[^\p{L}\p{N}\p{M}\s]/gu, ' ')
           .replace(/\s+/g, ' ')
           .trim();
         warnings.push('Video block contained a URL; converted it to a search query.');

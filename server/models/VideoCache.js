@@ -32,11 +32,17 @@ const videoCacheSchema = new mongoose.Schema(
 
 videoCacheSchema.plugin(serializePlugin);
 
-/** Collapses trivial variations so near-identical queries share one cache entry. */
+/**
+ * Collapses trivial variations so near-identical queries share one cache entry.
+ *
+ * `\p{M}` is kept alongside letters and numbers because combining marks carry meaning in
+ * many scripts — stripping them would merge genuinely different Devanagari queries into
+ * one cache key and serve the wrong video.
+ */
 export function normalizeQuery(query) {
   return String(query || '')
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/[^\p{L}\p{N}\p{M}\s]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

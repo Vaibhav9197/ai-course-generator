@@ -21,10 +21,12 @@ export function HeadingBlock({ block }) {
   );
 }
 
+// \p{M} keeps combining marks, without which Devanagari and similar scripts lose their
+// vowel signs and distinct headings can collide on the same anchor id.
 function slugify(text) {
   return String(text ?? '')
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, '-')
     .replace(/^-|-$/g, '');
 }
 
