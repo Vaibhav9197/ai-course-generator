@@ -1,70 +1,70 @@
 import { useEffect, useState } from 'react';
-import { Badge, Box, Container, Heading, HStack, Stack, Text } from '@chakra-ui/react';
-import { ColorModeButton } from './components/ColorMode.jsx';
-import { api } from './utils/api.js';
+import { Box, Drawer, Flex, Portal } from '@chakra-ui/react';
+import { Outlet, useLocation } from 'react-router-dom';
+import Sidebar from './components/Sidebar.jsx';
+import Topbar from './components/Topbar.jsx';
+
+const SIDEBAR_WIDTH = '18rem';
 
 /**
- * Phase 0 scaffold check.
+ * The application shell: a persistent sidebar plus topbar, with routed pages rendered
+ * into <Outlet />.
  *
- * This renders the backend's /api/health payload so the client -> server -> Mongo
- * wiring is verifiable before any feature code exists. Phase 2 replaces this with the
- * real layout shell (Sidebar + Topbar + <Outlet/>) and route definitions.
+ * Below the `lg` breakpoint the sidebar becomes a drawer — the same Sidebar component in
+ * both cases, so the course table of contents never has a second implementation to keep
+ * in sync.
  */
 export default function App() {
-  const [health, setHealth] = useState(null);
-  const [error, setError] = useState(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const location = useLocation();
 
+  // Close the mobile drawer whenever navigation happens, otherwise it covers the page
+  // the user just chose.
   useEffect(() => {
-    api
-      .get('/api/health')
-      .then((res) => setHealth(res.data))
-      .catch((err) => setError(err.message));
-  }, []);
+    setDrawerOpen(false);
+  }, [location.pathname]);
 
   return (
-    <Box minH="100dvh" bg="bg.canvas" color="fg.default">
-      <Container maxW="3xl" py="16">
-        <Stack gap="8">
-          <HStack justify="space-between">
-            <Heading size="2xl">Text-to-Learn</Heading>
-            <ColorModeButton />
-          </HStack>
+    <Flex direction="column" minH="100dvh" bg="bg.canvas" color="fg.default">
+      <Topbar onOpenSidebar={() => setDrawerOpen(true)} />
 
-          <Text color="fg.muted">
-            AI-powered course generator. Scaffold is up — feature phases land next.
-          </Text>
+      <Flex flex="1" align="stretch">
+        <Box
+          as="aside"
+          display={{ base: 'none', lg: 'block' }}
+          width={SIDEBAR_WIDTH}
+          flexShrink={0}
+          borderRightWidth="1px"
+          borderColor="border.default"
+          bg="bg.surface"
+          position="sticky"
+          top="3.5rem"
+          height="calc(100dvh - 3.5rem)"
+        >
+          <Sidebar />
+        </Box>
 
-          <Box borderWidth="1px" borderColor="border.default" rounded="card" bg="bg.surface" p="6">
-            <Heading size="md" mb="4">
-              Backend status
-            </Heading>
+        <Box as="main" flex="1" minW="0">
+          <Outlet />
+        </Box>
+      </Flex>
 
-            {error && <Text color="red.500">{error}</Text>}
-            {!error && !health && <Text color="fg.muted">Checking…</Text>}
-
-            {health && (
-              <Stack gap="3">
-                <HStack>
-                  <Text minW="24" color="fg.muted">
-                    API
-                  </Text>
-                  <Badge colorPalette="green">up · {health.uptime}s</Badge>
-                </HStack>
-                {Object.entries(health.services).map(([name, ready]) => (
-                  <HStack key={name}>
-                    <Text minW="24" color="fg.muted" textTransform="capitalize">
-                      {name}
-                    </Text>
-                    <Badge colorPalette={ready ? 'green' : 'gray'}>
-                      {ready ? 'configured' : 'not configured'}
-                    </Badge>
-                  </HStack>
-                ))}
-              </Stack>
-            )}
-          </Box>
-        </Stack>
-      </Container>
-    </Box>
+      <Drawer.Root
+        open={drawerOpen}
+        onOpenChange={(event) => setDrawerOpen(event.open)}
+        placement="start"
+      >
+        <Portal>
+          <Drawer.Backdrop />
+          <Drawer.Positioner>
+            <Drawer.Content maxW={SIDEBAR_WIDTH}>
+              <Drawer.Body p="0">
+                <Sidebar onNavigate={() => setDrawerOpen(false)} />
+              </Drawer.Body>
+            </Drawer.Content>
+          </Drawer.Positioner>
+        </Portal>
+      </Drawer.Root>
+    </Flex>
   );
 }
