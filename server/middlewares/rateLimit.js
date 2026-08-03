@@ -26,6 +26,25 @@ export const generationLimiter = rateLimit({
 });
 
 /**
+ * Narration is the most expensive operation per request: a translation call plus a TTS
+ * call, and TTS is billed per character. This limit is correspondingly tight.
+ */
+export const narrationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: () => isTest,
+  keyGenerator: (req) => req.auth?.payload?.sub ?? req.ip,
+  message: {
+    error: {
+      message: 'Too many narration requests. Please wait a few minutes.',
+      code: 'rate_limited',
+    },
+  },
+});
+
+/**
  * A looser limit for lesson enrichment. Enrichment is per-lesson and cached forever, so
  * legitimate reading generates a burst of calls as someone works through a new course —
  * the ceiling only needs to stop a scripted sweep.

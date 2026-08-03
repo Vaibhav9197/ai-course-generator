@@ -4,6 +4,10 @@ import { ApiError } from '../utils/ApiError.js';
 import { COURSE_OUTLINE_SCHEMA, LESSON_SCHEMA } from './geminiSchemas.js';
 import { generateCoursePrompt } from './prompts/coursePrompt.js';
 import { generateLessonPrompt, generateRepairPrompt } from './prompts/lessonPrompt.js';
+import {
+  generateTranslatePrompt,
+  generateSpeechDirective,
+} from './prompts/translatePrompt.js';
 import { parseJsonLoose, validateOutline, validateLesson } from './aiJson.service.js';
 
 /**
@@ -180,4 +184,84 @@ export async function generateLessonContent(context) {
     temperature: 0.7,
     label: 'lesson',
   });
+}
+
+/**
+ * Translates lesson prose to Hinglish.
+ *
+ * Plain text out, not JSON — so this bypasses generateText, which forces a JSON mime type.
+ */
+export async function translateToHinglish({ lessonTitle, plainText }) {
+  const ai = getClient();
+
+  if (!plainText?.trim()) {
+    throw ApiError.badRequest('This lesson has no text to translate.');
+  }
+
+  let response;
+  try {
+    response = await ai.models.generateContent({
+      model: env.gemini.textModel,
+      contents: generateTranslatePrompt(lessonTitle, plainText),
+      // Low temperature: this is a translation, and invention is the failure mode.
+      config: { temperature: 0.3 },
+    });
+  } catch (err) {
+    throw mapUpstreamError(err);
+  }
+
+  const text = response?.text?.trim();
+  if (!text) {
+    throw ApiError.badGateway('The AI returned no translation. Please try again.');
+  }
+
+  return text;
+}
+
+/**
+ * Synthesises speech from text.
+ *
+ * Returns raw PCM plus the format Gemini reported, for wav.service.js to wrap. The TTS
+ * models are all still preview-tagged, which is why the model ID is env-driven.
+ *
+ * @returns {Promise<{ pcm: Buffer, mimeType: string }>}
+ */
+export async function synthesizeSpeech(text, { voiceName } = {}) {
+  const ai = getClient();
+
+  if (!text?.trim()) {
+    throw ApiError.badRequest('There is no text to narrate.');
+  }
+
+  let response;
+  try {
+    response = await ai.models.generateContent({
+      model: env.gemini.ttsModel,
+      contents: generateSpeechDirective(text),
+      config: {
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: voiceName || env.gemini.ttsVoice },
+          },
+        },
+      },
+    });
+  } catch (err) {
+    throw mapUpstreamError(err);
+  }
+
+  const part = response?.candidates?.[0]?.content?.parts?.find((item) => item.inlineData?.data);
+  if (!part) {
+    const reason = response?.candidates?.[0]?.finishReason;
+    throw ApiError.badGateway(
+      `The AI returned no audio${reason ? ` (reason: ${reason})` : ''}. ` +
+        `Confirm GEMINI_TTS_MODEL ("${env.gemini.ttsModel}") is a current text-to-speech model.`,
+    );
+  }
+
+  return {
+    pcm: Buffer.from(part.inlineData.data, 'base64'),
+    mimeType: part.inlineData.mimeType ?? '',
+  };
 }

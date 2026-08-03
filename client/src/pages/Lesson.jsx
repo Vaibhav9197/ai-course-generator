@@ -16,6 +16,7 @@ import { FiChevronLeft, FiChevronRight, FiTarget } from 'react-icons/fi';
 import { useFetch } from '../hooks/useApi.js';
 import LessonRenderer from '../components/LessonRenderer.jsx';
 import LessonPDFExporter from '../components/LessonPDFExporter.jsx';
+import HinglishPlayer from '../components/HinglishPlayer.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
 import ErrorMessage from '../components/ErrorMessage.jsx';
 
@@ -29,6 +30,8 @@ export default function Lesson() {
   const { courseId, moduleIndex, lessonIndex } = useParams();
   const url = `/api/courses/${courseId}/module/${moduleIndex}/lesson/${lessonIndex}`;
   const { data, error, loading, refetch } = useFetch(url);
+  // Drives the account-level "always show the Hinglish explanation" preference.
+  const { data: profile } = useFetch('/api/me');
 
   if (loading) {
     return (
@@ -114,6 +117,13 @@ export default function Lesson() {
             error={lesson.enrichError}
             onRetry={refetch}
             title="This lesson could not be written"
+          />
+        )}
+
+        {lesson.isEnriched && (
+          <HinglishPlayer
+            lesson={lesson}
+            autoTranslate={Boolean(profile?.user?.prefs?.autoTranslateToHinglish)}
           />
         )}
 
