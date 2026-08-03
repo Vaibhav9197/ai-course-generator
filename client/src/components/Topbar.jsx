@@ -2,6 +2,7 @@ import { Box, Heading, HStack, IconButton, Spacer } from '@chakra-ui/react';
 import { Link } from 'react-router-dom';
 import { FiMenu } from 'react-icons/fi';
 import { ColorModeButton } from './ColorMode.jsx';
+import UserMenu from './UserMenu.jsx';
 
 /**
  * Sticky application header. The menu button is the only way to reach navigation on
@@ -38,6 +39,7 @@ export function Topbar({ onOpenSidebar }) {
         <Spacer />
 
         <ColorModeButton />
+        <UserMenu />
       </HStack>
     </Box>
   );
