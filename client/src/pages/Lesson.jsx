@@ -146,9 +146,11 @@ export default function Lesson() {
 }
 
 /**
- * Shown for a lesson whose content has not been generated yet. Reachable in development
- * with seeded stub lessons; once generation is wired up (phase 3) the API enriches on
- * read, so users normally never see this.
+ * Shown for a lesson that has no content and no error.
+ *
+ * The API generates lesson bodies on read, so this is normally unreachable — it appears
+ * only when generation is unconfigured (no GEMINI_API_KEY) and the lesson was created by
+ * the seed script as a stub.
  */
 function PendingLesson() {
   return (
@@ -163,8 +165,9 @@ function PendingLesson() {
       <Stack gap="2" align="center">
         <Heading size="md">Not written yet</Heading>
         <Text color="fg.muted" maxW="md" fontSize="sm">
-          This lesson exists in the outline but its content has not been generated. It will
-          be written automatically the first time it is opened once AI generation is enabled.
+          This lesson exists in the outline but has no content. Lessons are normally written
+          the first time they are opened — check that the server has a Gemini API key
+          configured.
         </Text>
       </Stack>
     </Box>
