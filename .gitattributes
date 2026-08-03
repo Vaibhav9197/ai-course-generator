@@ -1,0 +1,9 @@
+# Normalise line endings so the repo is identical on Windows, macOS, Linux and CI.
+* text=auto eol=lf
+
+*.pdf binary
+*.png binary
+*.jpg binary
+*.wav binary
+
+package-lock.json linguist-generated=true -diff

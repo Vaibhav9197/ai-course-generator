@@ -1,0 +1,20 @@
+{
+  "name": "text-to-learn",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-powered course generator: turns a topic prompt into a structured multi-module course",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
+    "lint": "npm --prefix server run lint && npm --prefix client run lint",
+    "test": "npm --prefix server run test && npm --prefix client run test",
+    "seed": "npm --prefix server run seed"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
