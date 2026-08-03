@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { registerModel } from './registerModel.js';
 import { serializePlugin } from './plugins/serialize.js';
 
 /**
@@ -40,5 +41,5 @@ export function normalizeQuery(query) {
     .trim();
 }
 
-export const VideoCache = mongoose.model('VideoCache', videoCacheSchema);
+export const VideoCache = registerModel('VideoCache', videoCacheSchema);
 export default VideoCache;

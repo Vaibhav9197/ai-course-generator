@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { registerModel } from './registerModel.js';
 import { serializePlugin } from './plugins/serialize.js';
 
 /**
@@ -25,5 +26,5 @@ const moduleSchema = new mongoose.Schema(
 
 moduleSchema.plugin(serializePlugin);
 
-export const Module = mongoose.model('Module', moduleSchema);
+export const Module = registerModel('Module', moduleSchema);
 export default Module;

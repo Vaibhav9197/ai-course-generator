@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { registerModel } from './registerModel.js';
 import { serializePlugin } from './plugins/serialize.js';
 import { isBlockType } from '../../shared/contentBlocks.js';
 
@@ -74,5 +75,5 @@ lessonSchema.methods.applyEnrichment = function applyEnrichment({ objectives, co
   return this.save();
 };
 
-export const Lesson = mongoose.model('Lesson', lessonSchema);
+export const Lesson = registerModel('Lesson', lessonSchema);
 export default Lesson;
