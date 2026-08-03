@@ -94,17 +94,24 @@ returns **404 on mismatch — never 403**, so course IDs cannot be enumerated.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/health` | Public. Also pre-warms Render's cold start. |
+| GET | `/api/health` | Public. Reports which services are configured; also pre-warms Render's cold start. |
 | POST | `/api/courses/generate` | Outline generation. Rate-limited + idempotency-locked. |
 | GET | `/api/courses` | Current user's courses. |
 | GET | `/api/courses/:courseId` | Populated tree, titles only. |
 | DELETE | `/api/courses/:courseId` | Cascades to modules + lessons. |
-| GET | `/api/courses/:courseId/module/:mi/lesson/:li` | Enriches on demand if not yet enriched. |
-| POST | `/api/lessons/:lessonId/regenerate` | Force re-enrich. |
-| GET | `/api/youtube/search?query=` | Cache-first videoId lookup. |
+| GET | `/api/courses/:courseId/module/:mi/lesson/:li` | Generates the body on first view. |
+| POST | `/api/lessons/:lessonId/regenerate` | Force regeneration. |
 | POST | `/api/lessons/:lessonId/translate` | Hinglish text, cached on the lesson. |
 | POST | `/api/lessons/:lessonId/audio` | `audio/wav` stream, not persisted. |
-| PATCH | `/api/me` | Update preferences. |
+| GET | `/api/youtube/search?query=` | Cache-first videoId lookup. Always 200. |
+| GET · PATCH | `/api/me` | Profile upsert and preferences. |
+
+Full request/response detail is in [API.md](./API.md).
+
+**Development without credentials.** When Auth0 is unconfigured and `NODE_ENV` is not
+`production`, `requireAuth` attributes requests to a fixed local development user, so the
+whole application is usable before any tenant exists. The fallback is hard-disabled in
+production — a public URL must never reach it.
 
 ## Notable engineering constraints
 
@@ -128,11 +135,21 @@ exhaustion degrades to a "Search on YouTube" link rather than an error.
 lesson because it is small and the expensive part to get right; multi-MB audio blobs would
 strain Mongo's 16 MB document limit and force GridFS for a once-per-lesson feature.
 
-**PDF export renders from a hidden tree.** `LessonPDFExporter` holds a ref to an off-screen
-794px-wide (A4 at 96dpi) always-light copy of the lesson, so output is identical regardless
-of the active colour mode. Note that `html2canvas` cannot parse `oklch()`/`lab()` colours,
-which Chakra v3 tokens can emit — the PDF tree therefore uses plain hex/rgb inline styles
-and does not reuse live Chakra-styled components.
+**PDF export renders from a separate print tree.** `PdfLessonSheet` is an independent
+component using plain inline hex colours and no Chakra at all, rendered off-screen at 794px
+(A4 at 96dpi) and captured by ref. It is not a rasterisation of the live lesson, which buys
+three things: output identical in light and dark mode; no dependency on CSS custom
+properties or modern colour functions (`oklch`/`lab`/`color-mix`), which canvas rasterisers
+fail on; and line breaks decided by the sheet rather than the browser window.
+
+`html2canvas-pro` rather than `html2canvas`: the original is unmaintained at 1.4.1 and
+throws on those colour functions. The current build emits none, but one Chakra update would
+be enough. Both it and `jspdf` are dynamically imported — ~650kB combined, and most visits
+never export anything.
+
+The element is hidden by being positioned off-screen at zero opacity, **not** `display:none`
+or `visibility:hidden`: both collapse layout, and an element with no geometry captures as
+blank. `aria-hidden` plus `inert` keep it out of the accessibility tree and tab order.
 
 **Auth identity comes from the JWT, not `/userinfo`.** Calling Auth0's `/userinfo` per
 request would add a network hop and hit rate limits; the verified `sub` claim is
@@ -144,6 +161,28 @@ authoritative and `/userinfo` is called once, at first-login user upsert.
 |---|---|---|
 | `VITE_YOUTUBE_API_KEY` in frontend env | Key server-side only, proxied via `/api/youtube/search` | `VITE_*` vars are inlined into the public bundle — that publishes the key |
 | Backend fetches Auth0 `/userinfo` per request | Identity from verified JWT `sub`; `/userinfo` once at upsert | Removes a per-request hop and rate-limit exposure |
-| Two separate repositories | One repo, `client/` + `server/`, two deploy roots | Matches the brief's own final folder structure; allows atomic cross-stack commits |
+| Two separate repositories | One repo, `client/` + `server/`, two deploy targets | Matches the brief's own final folder structure; allows atomic cross-stack commits |
 | (implied) generate the whole course up front | Two-stage: outline now, lessons on first open | Avoids long waits, truncated JSON, and wasted tokens |
 | Return a `.wav` buffer for narration | Same, but only translated **text** is cached | Multi-MB PCM per lesson would force GridFS |
+| `html2canvas` | `html2canvas-pro` (drop-in fork) | The original is unmaintained and throws on `oklch`/`lab`/`color-mix` |
+| Vercel Root Directory = `client` | Vercel builds from the repository root | Building from `client/` puts sibling `shared/` outside the build context |
+
+## Operational notes
+
+**Cost control.** Generation endpoints are paid AI calls behind a public URL.
+`express-rate-limit` is keyed on the JWT `sub` rather than IP — IP is both too coarse
+(shared NAT) and too easy to rotate — with a tighter ceiling on narration, which is two
+calls and billed per character. `runOnce` de-duplicates identical concurrent work, so a
+double-clicked button or two open tabs pay once. The in-flight map is per-process, which
+suits a single Render instance; a multi-instance deployment would need a Mongo or Redis
+lock.
+
+**Idempotent model registration.** `registerModel` reuses an already-compiled Mongoose
+model instead of throwing `OverwriteModelError`, which happens whenever the module graph is
+re-evaluated without a process restart — under `node --watch` in development and
+`vi.resetModules()` in tests.
+
+**Unicode.** Slug and cache-key normalisation keeps `\p{M}` (combining marks) alongside
+letters and digits. Devanagari vowel signs are marks, so a letters-only filter reduces
+"हिंदी" to "हद" — which mangles filenames and, worse, collapses distinct Hindi video queries
+onto one cache key. This matters directly given the Hinglish feature.
