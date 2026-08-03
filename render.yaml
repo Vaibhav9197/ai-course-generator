@@ -1,0 +1,56 @@
+# Render blueprint for the backend.
+#
+# Render can create the service from this file (Blueprints > New Blueprint Instance),
+# which keeps the deployment reproducible rather than a set of dashboard clicks.
+#
+# Secrets are marked sync: false — Render prompts for them on first deploy and never
+# stores them in the repository.
+services:
+  - type: web
+    name: text-to-learn-backend
+    runtime: node
+    plan: free
+    # The repo holds both client/ and server/; this service builds only the server.
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+
+      # Set to the Vercel URL once the frontend is deployed. Comma-separated for
+      # multiple origins. Vercel preview subdomains are allowed automatically by the
+      # CORS check in server/app.js.
+      - key: CLIENT_ORIGIN
+        sync: false
+
+      - key: MONGO_URI
+        sync: false
+
+      - key: AUTH0_ISSUER_BASE_URL
+        sync: false
+      - key: AUTH0_AUDIENCE
+        sync: false
+
+      - key: GEMINI_API_KEY
+        sync: false
+
+      # Model IDs are env-driven because Gemini identifiers change often and all TTS
+      # models are still preview-tagged. Confirm current values at
+      # https://ai.google.dev/gemini-api/docs/models before deploying.
+      - key: GEMINI_TEXT_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_TTS_MODEL
+        value: gemini-2.5-flash-preview-tts
+
+      - key: YOUTUBE_API_KEY
+        sync: false
+
+      - key: RATE_LIMIT_GENERATIONS
+        value: 10
+      - key: RATE_LIMIT_WINDOW_MINUTES
+        value: 60
