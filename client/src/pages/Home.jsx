@@ -1,18 +1,18 @@
 import { useState } from 'react';
 import { Box, Container, Heading, SimpleGrid, Stack, Text } from '@chakra-ui/react';
+import { useNavigate } from 'react-router-dom';
 import { useFetch } from '../hooks/useApi.js';
 import { api } from '../utils/api.js';
 import CourseCard from '../components/CourseCard.jsx';
+import PromptForm from '../components/PromptForm.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
 import ErrorMessage from '../components/ErrorMessage.jsx';
 
 /**
- * Landing page: the course library.
- *
- * The prompt form that creates courses lands in phase 3, when there is a generation
- * endpoint for it to call.
+ * Landing page: generate a course, and browse the ones already generated.
  */
 export default function Home() {
+  const navigate = useNavigate();
   const { data, error, loading, refetch } = useFetch('/api/courses');
   const [deletingId, setDeletingId] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
@@ -34,13 +34,16 @@ export default function Home() {
 
   return (
     <Container maxW="6xl" py={{ base: '6', md: '10' }} px={{ base: '4', md: '6' }}>
-      <Stack gap="8">
-        <Stack gap="2">
-          <Heading size="2xl">Your courses</Heading>
-          <Text color="fg.muted">
-            Every course you generate is saved here and stays available to revisit.
-          </Text>
-        </Stack>
+      <Stack gap="10">
+        <PromptForm onCreated={(course) => navigate(`/courses/${course.id ?? course._id}`)} />
+
+        <Stack gap="6">
+          <Stack gap="2">
+            <Heading size="xl">Your courses</Heading>
+            <Text color="fg.muted">
+              Every course you generate is saved here and stays available to revisit.
+            </Text>
+          </Stack>
 
         {deleteError && <ErrorMessage error={deleteError} title="Could not delete course" />}
 
@@ -64,6 +67,7 @@ export default function Home() {
             ))}
           </SimpleGrid>
         )}
+        </Stack>
       </Stack>
     </Container>
   );
@@ -82,8 +86,7 @@ function EmptyState() {
       <Stack gap="2" align="center">
         <Heading size="md">No courses yet</Heading>
         <Text color="fg.muted" maxW="md">
-          Run <Text as="code">npm run seed</Text> to load a sample course, or generate one
-          from a topic prompt once course generation is wired up.
+          Generate your first course using the form above.
         </Text>
       </Stack>
     </Box>

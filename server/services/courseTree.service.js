@@ -102,6 +102,38 @@ export async function resolveLessonByIndex({ courseId, creator, moduleIndex, les
   return { course, module: mod, lesson };
 }
 
+/**
+ * Builds the breadcrumb and prev/next targets the lesson viewer needs, so the page renders
+ * from a single request.
+ *
+ * Navigation walks the flattened lesson sequence rather than the current module's array,
+ * so "next" correctly steps into the following module at a module boundary.
+ *
+ * `course.modules` must be populated with at least `title` and `lessons`.
+ */
+export function buildLessonContext({ course, module: mod, moduleIndex, lessonIndex }) {
+  const flat = [];
+  course.modules.forEach((m, mi) => {
+    (m.lessons ?? []).forEach((_, li) => flat.push({ moduleIndex: mi, lessonIndex: li }));
+  });
+
+  const position = flat.findIndex(
+    (entry) => entry.moduleIndex === moduleIndex && entry.lessonIndex === lessonIndex,
+  );
+
+  return {
+    courseId: course._id,
+    courseTitle: course.title,
+    moduleTitle: mod.title,
+    moduleIndex,
+    lessonIndex,
+    position: position + 1,
+    total: flat.length,
+    prev: position > 0 ? flat[position - 1] : null,
+    next: position >= 0 && position < flat.length - 1 ? flat[position + 1] : null,
+  };
+}
+
 /** Deletes a course and everything beneath it. */
 export async function deleteCourseTree(courseId, creator) {
   const course = await Course.findOne({ _id: courseId, creator });
