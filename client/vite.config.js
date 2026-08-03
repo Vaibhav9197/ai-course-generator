@@ -26,10 +26,5 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: true,
   },
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    setupFiles: './src/test/setup.js',
-    css: false,
-  },
+  // Test config lives in vitest.config.js — see the note there about the JSX runtime.
 });
