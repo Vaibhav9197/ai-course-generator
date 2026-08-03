@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { registerModel } from './registerModel.js';
 import { serializePlugin } from './plugins/serialize.js';
 
 /**
@@ -55,5 +56,5 @@ userSchema.statics.upsertFromClaims = function upsertFromClaims(claims) {
   );
 };
 
-export const User = mongoose.model('User', userSchema);
+export const User = registerModel('User', userSchema);
 export default User;

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { registerModel } from './registerModel.js';
 import { serializePlugin } from './plugins/serialize.js';
 
 /**
@@ -49,5 +50,5 @@ courseSchema.virtual('lessonCount').get(function lessonCount() {
   );
 });
 
-export const Course = mongoose.model('Course', courseSchema);
+export const Course = registerModel('Course', courseSchema);
 export default Course;
