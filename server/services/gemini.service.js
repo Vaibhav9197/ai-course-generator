@@ -16,13 +16,17 @@ import { parseJsonLoose, validateOutline, validateLesson } from './aiJson.servic
  */
 
 /**
- * Per-call ceiling. The SDK otherwise waits indefinitely, and a stalled call was observed
- * hanging for minutes. Text generation can make two attempts, so 2 × 45s stays inside the
- * client's 120s axios timeout and the user sees a real error instead of a dead spinner.
+ * Per-call ceiling, set through the SDK's `httpOptions.timeout`.
  *
- * Aborting is client-side only: the upstream call may still complete and be billed.
+ * Measured on the free tier: most lesson calls answer in 5-15s, but some stall upstream
+ * until Google's own deadline (90s, then `504 Deadline expired`). Without a ceiling the
+ * user stares at a spinner for the whole stall. So a text call is cut off at 30s and
+ * generateValidated retries it once; 2 × 30s stays inside the client's 120s axios timeout.
+ *
+ * A fired timeout throws an AbortError, mapped to 504 below. The abandoned upstream call
+ * may still complete and be billed.
  */
-const TEXT_TIMEOUT_MS = 45_000;
+const TEXT_TIMEOUT_MS = 30_000;
 const SPEECH_TIMEOUT_MS = 60_000;
 
 const TEXT_MODEL_SETTING = { model: () => env.gemini.textModel, envVar: 'GEMINI_TEXT_MODEL' };
@@ -68,7 +72,7 @@ async function generateText({ prompt, responseSchema, temperature = 0.7, maxOutp
         ...(responseSchema ? { responseSchema } : {}),
         temperature,
         ...(maxOutputTokens ? { maxOutputTokens } : {}),
-        abortSignal: AbortSignal.timeout(TEXT_TIMEOUT_MS),
+        httpOptions: { timeout: TEXT_TIMEOUT_MS },
       },
     });
   } catch (err) {
@@ -98,7 +102,13 @@ function mapUpstreamError(err, setting = TEXT_MODEL_SETTING) {
   const message = String(err?.message ?? err);
   const status = err?.status ?? err?.code;
 
-  if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+  // Our own timeout firing, or Google giving up on a stalled request itself.
+  if (
+    err?.name === 'TimeoutError' ||
+    err?.name === 'AbortError' ||
+    status === 504 ||
+    /DEADLINE_EXCEEDED|Deadline expired/i.test(message)
+  ) {
     return ApiError.gatewayTimeout(
       'The AI service took too long to respond. Please try again in a moment.',
       { cause: err },
@@ -130,33 +140,46 @@ function mapUpstreamError(err, setting = TEXT_MODEL_SETTING) {
 }
 
 /**
- * Runs a generate -> parse -> validate cycle, retrying once with the validation error fed
- * back to the model.
+ * Runs a generate -> parse -> validate cycle with one retry.
+ *
+ * The retry depends on what went wrong. Bad output is retried with the validation error
+ * fed back (a repair prompt). A timed-out call produced nothing to repair, so it is simply
+ * sent again: free-tier stalls are intermittent and the second try usually answers fast.
  *
  * One retry, not more: a second failure almost always means the request itself is the
- * problem (an incoherent topic, a safety block), and each attempt costs the user another
- * 10-20 seconds of waiting.
+ * problem (an incoherent topic, a safety block, an outage), and each attempt costs the
+ * user more waiting.
  */
 async function generateValidated({ prompt, responseSchema, validate, temperature, label }) {
   let lastError = 'unknown';
   let lastOutput = '';
+  let lastTimeout = null;
 
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const currentPrompt =
-      attempt === 1
-        ? prompt
-        : generateRepairPrompt({
-            originalPrompt: prompt,
-            badOutput: lastOutput,
-            validationError: lastError,
-          });
+    const isRepair = Boolean(lastOutput);
+    const currentPrompt = isRepair
+      ? generateRepairPrompt({
+          originalPrompt: prompt,
+          badOutput: lastOutput,
+          validationError: lastError,
+        })
+      : prompt;
 
-    const raw = await generateText({
-      prompt: currentPrompt,
-      responseSchema,
-      // Drop the temperature on the repair attempt: we want obedience, not creativity.
-      temperature: attempt === 1 ? temperature : 0.2,
-    });
+    let raw;
+    try {
+      raw = await generateText({
+        prompt: currentPrompt,
+        responseSchema,
+        // Drop the temperature on a repair attempt: we want obedience, not creativity.
+        temperature: isRepair ? 0.2 : temperature,
+      });
+    } catch (err) {
+      if (err?.status !== 504) throw err;
+      lastTimeout = err;
+      console.warn(`[gemini] ${label} attempt ${attempt} timed out`);
+      continue;
+    }
+    lastTimeout = null;
     lastOutput = raw;
 
     const parsed = parseJsonLoose(raw);
@@ -177,6 +200,8 @@ async function generateValidated({ prompt, responseSchema, validate, temperature
     lastError = validated.error;
     console.warn(`[gemini] ${label} attempt ${attempt} invalid: ${validated.error}`);
   }
+
+  if (lastTimeout) throw lastTimeout;
 
   throw ApiError.badGateway(
     `The AI could not produce valid ${label} content after two attempts. Last problem: ${lastError}`,
@@ -229,7 +254,7 @@ export async function translateToHinglish({ lessonTitle, plainText }) {
       model: env.gemini.textModel,
       contents: generateTranslatePrompt(lessonTitle, plainText),
       // Low temperature: this is a translation, and invention is the failure mode.
-      config: { temperature: 0.3, abortSignal: AbortSignal.timeout(TEXT_TIMEOUT_MS) },
+      config: { temperature: 0.3, httpOptions: { timeout: TEXT_TIMEOUT_MS } },
     });
   } catch (err) {
     throw mapUpstreamError(err, TEXT_MODEL_SETTING);
@@ -275,7 +300,7 @@ export async function synthesizeSpeech(text, { voiceName } = {}) {
             prebuiltVoiceConfig: { voiceName: voiceName || env.gemini.ttsVoice },
           },
         },
-        abortSignal: AbortSignal.timeout(SPEECH_TIMEOUT_MS),
+        httpOptions: { timeout: SPEECH_TIMEOUT_MS },
       },
     });
   } catch (err) {
