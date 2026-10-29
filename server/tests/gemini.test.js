@@ -180,25 +180,53 @@ describe('generateCourseOutline', () => {
     });
   });
 
-  it('bounds every call with an abort signal', async () => {
+  it('bounds every call with the SDK HTTP timeout', async () => {
     const client = fakeClient([VALID_OUTLINE]);
     gemini.__setClientForTests(client);
 
     await gemini.generateCourseOutline('Rust');
 
-    expect(client.calls[0].config.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(client.calls[0].config.httpOptions.timeout).toBeGreaterThan(0);
+    expect(client.calls[0].config.abortSignal).toBeUndefined();
   });
 
-  it('maps a timed-out call to 504 instead of hanging or a generic failure', async () => {
-    const timeout = Object.assign(new Error('The operation was aborted due to timeout'), {
-      name: 'TimeoutError',
-    });
-    gemini.__setClientForTests(fakeClient([timeout]));
+  // The shape @google/genai throws when httpOptions.timeout fires.
+  const timeoutError = () =>
+    Object.assign(new Error('This operation was aborted'), { name: 'AbortError', code: 20 });
+
+  it('resends a timed-out call unchanged and succeeds on the second try', async () => {
+    const client = fakeClient([timeoutError(), VALID_OUTLINE]);
+    gemini.__setClientForTests(client);
+
+    const outline = await gemini.generateCourseOutline('Rust');
+
+    expect(outline.title).toBe('Introduction to Rust');
+    expect(client.calls).toHaveLength(2);
+    // Nothing came back to repair, so the retry is the original prompt, not a repair prompt.
+    expect(client.calls[1].contents).toBe(client.calls[0].contents);
+  });
+
+  it('reports 504 when both attempts time out, instead of hanging or a generic failure', async () => {
+    gemini.__setClientForTests(fakeClient([timeoutError(), timeoutError()]));
 
     await expect(gemini.generateCourseOutline('Rust')).rejects.toMatchObject({
       status: 504,
       message: expect.stringMatching(/took too long/),
     });
+  });
+
+  it('treats Google’s own "Deadline expired" as a timeout and retries it', async () => {
+    const deadline = Object.assign(
+      new Error('{"error":{"code":504,"message":"Deadline expired before operation could complete.","status":"DEADLINE_EXCEEDED"}}'),
+      { status: 504 },
+    );
+    const client = fakeClient([deadline, VALID_OUTLINE]);
+    gemini.__setClientForTests(client);
+
+    await expect(gemini.generateCourseOutline('Rust')).resolves.toMatchObject({
+      title: 'Introduction to Rust',
+    });
+    expect(client.calls).toHaveLength(2);
   });
 });
 
@@ -226,7 +254,8 @@ describe('synthesizeSpeech', () => {
     await gemini.synthesizeSpeech('Git ek version control system hai.');
 
     expect(client.calls[0].contents).toBe('Git ek version control system hai.');
-    expect(client.calls[0].config.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(client.calls[0].config.httpOptions.timeout).toBeGreaterThan(0);
+    expect(client.calls[0].config.abortSignal).toBeUndefined();
   });
 
   it('returns the decoded audio and the reported mime type', async () => {
