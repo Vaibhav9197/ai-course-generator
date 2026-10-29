@@ -6,6 +6,7 @@ import { generateCoursePrompt } from './prompts/coursePrompt.js';
 import { generateLessonPrompt, generateRepairPrompt } from './prompts/lessonPrompt.js';
 import { generateTranslatePrompt } from './prompts/translatePrompt.js';
 import { parseJsonLoose, validateOutline, validateLesson } from './aiJson.service.js';
+import { COURSE_LIMITS } from '../../shared/contentBlocks.js';
 
 /**
  * Gemini integration.
@@ -29,7 +30,15 @@ import { parseJsonLoose, validateOutline, validateLesson } from './aiJson.servic
 const TEXT_TIMEOUT_MS = 30_000;
 const SPEECH_TIMEOUT_MS = 60_000;
 
-const TEXT_MODEL_SETTING = { model: () => env.gemini.textModel, envVar: 'GEMINI_TEXT_MODEL' };
+/** Error codes for upstream failures that are worth one retry. */
+const AI_TIMEOUT = 'ai_timeout';
+const AI_BUSY = 'ai_busy';
+const TRANSIENT_CODES = new Set([AI_TIMEOUT, AI_BUSY]);
+
+/** Pause before retrying a "high demand" rejection; an instant retry tends to hit it again. */
+const BUSY_RETRY_DELAY_MS = 1500;
+
+const TEXT_MODEL_SETTING ={ model: () => env.gemini.textModel, envVar: 'GEMINI_TEXT_MODEL' };
 const TTS_MODEL_SETTING = { model: () => env.gemini.ttsModel, envVar: 'GEMINI_TTS_MODEL' };
 
 let client = null;
@@ -111,7 +120,14 @@ function mapUpstreamError(err, setting = TEXT_MODEL_SETTING) {
   ) {
     return ApiError.gatewayTimeout(
       'The AI service took too long to respond. Please try again in a moment.',
-      { cause: err },
+      { cause: err, code: AI_TIMEOUT },
+    );
+  }
+  // Google's "model is currently experiencing high demand": temporary by its own wording.
+  if (status === 503 || /UNAVAILABLE|high demand|overloaded/i.test(message)) {
+    return ApiError.serviceUnavailable(
+      'The AI service is busy right now. Please try again in a minute.',
+      { cause: err, code: AI_BUSY },
     );
   }
   if (status === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(message)) {
@@ -143,17 +159,24 @@ function mapUpstreamError(err, setting = TEXT_MODEL_SETTING) {
  * Runs a generate -> parse -> validate cycle with one retry.
  *
  * The retry depends on what went wrong. Bad output is retried with the validation error
- * fed back (a repair prompt). A timed-out call produced nothing to repair, so it is simply
- * sent again: free-tier stalls are intermittent and the second try usually answers fast.
+ * fed back (a repair prompt). A timed-out or "high demand" call produced nothing to
+ * repair, so it is simply sent again (after a short pause for "busy"): both are
+ * intermittent on the free tier and the second try often succeeds.
  *
  * One retry, not more: a second failure almost always means the request itself is the
  * problem (an incoherent topic, a safety block, an outage), and each attempt costs the
  * user more waiting.
+ *
+ * A validator may reject output that is still usable (a lesson short of quiz questions)
+ * and attach it as `fallback` with a `score`. If no attempt fully passes, the
+ * best-scoring fallback is returned instead of an error, so paying for a repair can
+ * never leave the user worse off than the first attempt.
  */
 async function generateValidated({ prompt, responseSchema, validate, temperature, label }) {
   let lastError = 'unknown';
   let lastOutput = '';
-  let lastTimeout = null;
+  let lastTransient = null;
+  let best = null;
 
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const isRepair = Boolean(lastOutput);
@@ -174,12 +197,15 @@ async function generateValidated({ prompt, responseSchema, validate, temperature
         temperature: isRepair ? 0.2 : temperature,
       });
     } catch (err) {
-      if (err?.status !== 504) throw err;
-      lastTimeout = err;
-      console.warn(`[gemini] ${label} attempt ${attempt} timed out`);
+      // A usable earlier attempt beats any error from the retry.
+      if (best) break;
+      if (!TRANSIENT_CODES.has(err?.code)) throw err;
+      lastTransient = err;
+      console.warn(`[gemini] ${label} attempt ${attempt} failed transiently (${err.code})`);
+      if (err.code === AI_BUSY && attempt === 1) await delay(BUSY_RETRY_DELAY_MS);
       continue;
     }
-    lastTimeout = null;
+    lastTransient = null;
     lastOutput = raw;
 
     const parsed = parseJsonLoose(raw);
@@ -199,13 +225,26 @@ async function generateValidated({ prompt, responseSchema, validate, temperature
 
     lastError = validated.error;
     console.warn(`[gemini] ${label} attempt ${attempt} invalid: ${validated.error}`);
+
+    if (validated.fallback && (!best || validated.fallback.score > best.score)) {
+      best = validated.fallback;
+    }
   }
 
-  if (lastTimeout) throw lastTimeout;
+  if (best) {
+    console.warn(`[gemini] ${label} kept the best attempt (score ${best.score}) after retrying`);
+    return best.value;
+  }
+
+  if (lastTransient) throw lastTransient;
 
   throw ApiError.badGateway(
     `The AI could not produce valid ${label} content after two attempts. Last problem: ${lastError}`,
   );
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -230,7 +269,13 @@ export async function generateLessonContent(context) {
   return generateValidated({
     prompt: generateLessonPrompt(context),
     responseSchema: LESSON_SCHEMA,
-    validate: (value) => validateLesson(value, { fallbackTitle: context.lessonTitle }),
+    validate: (value) =>
+      validateLesson(value, {
+        fallbackTitle: context.lessonTitle,
+        // Flash-Lite often emits quiz blocks with missing options or answers; asking for a
+        // repair when too few survive is what keeps lessons at the brief's 4-5 questions.
+        minQuestions: COURSE_LIMITS.MIN_MCQS_PER_LESSON,
+      }),
     temperature: 0.7,
     label: 'lesson',
   });

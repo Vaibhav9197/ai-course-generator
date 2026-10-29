@@ -126,9 +126,17 @@ instruction placed before the text, so the narration text is sent on its own.
 
 **Every Gemini call has a time limit** (30 s for text, 60 s for speech) via the SDK's
 `httpOptions.timeout`, mapped to a 504. Free-tier calls usually answer in 5–20 s, but some
-stall upstream until Google's own 90 s deadline. A timed-out text call is resent once
-unchanged (there is no output to repair), so most stalls cost the user ~30 s instead of a
-failure.
+stall upstream until Google's own 90 s deadline, and during load spikes Google rejects
+calls with `503 … high demand`. Both are resent once unchanged (there is no output to
+repair; "busy" after a 1.5 s pause), and if both attempts fail the user gets a readable
+504 or 503 message rather than raw upstream JSON.
+
+**Lessons need at least 4 valid quiz questions.** Flash-Lite often emits MCQ blocks with
+missing options or a non-numeric answer; the validator drops those, and if fewer than 4
+survive the lesson goes through the repair prompt, which spells out what a valid question
+needs. The cleaned first attempt is kept as a fallback, and the better of the two attempts
+is returned if the repair is still short or fails outright. That costs a second request
+only when the first is short, and never more than two per lesson.
 
 **Further reading is a lesson field, not a block.** `Lesson.resources` holds 2–4
 `{ title, kind, query }` entries. Like video blocks they carry a search phrase, never a

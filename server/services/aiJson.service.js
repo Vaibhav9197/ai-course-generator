@@ -257,9 +257,16 @@ const MIN_USABLE_BLOCKS = 3;
  * than discarding 2,000 words of correct prose and paying to generate it again — but if so
  * much is dropped that the lesson is no longer teachable, this fails so the caller can retry.
  *
- * @returns {{ ok: true, value: object, warnings: string[] } | { ok: false, error: string }}
+ * `minQuestions` makes a quiz shortfall a failure too. Dropping malformed questions is
+ * right, but a lesson left with none misses the brief's 4-5 per lesson, and a repair
+ * prompt usually fixes it. Such a failure still carries the cleaned lesson as `fallback`
+ * (with `score` = its question count), so the caller can keep the better of two attempts
+ * instead of failing a lesson whose prose is fine.
+ *
+ * @returns {{ ok: true, value: object, warnings: string[] }
+ *   | { ok: false, error: string, fallback?: { value: object, score: number } }}
  */
-export function validateLesson(input, { fallbackTitle } = {}) {
+export function validateLesson(input, { fallbackTitle, minQuestions = 0 } = {}) {
   const parsed = lessonSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: formatZodError(parsed.error) };
@@ -309,16 +316,30 @@ export function validateLesson(input, { fallbackTitle } = {}) {
     );
   }
 
-  return {
-    ok: true,
-    value: {
-      title: parsed.data.title || fallbackTitle,
-      objectives: parsed.data.objectives.slice(0, 6),
-      content: capMcqs(content),
-      resources: normalizeResources(parsed.data.resources, warnings),
-    },
-    warnings,
+  const value = {
+    title: parsed.data.title || fallbackTitle,
+    objectives: parsed.data.objectives.slice(0, 6),
+    content: capMcqs(content),
+    resources: normalizeResources(parsed.data.resources, warnings),
   };
+
+  const questionCount = Math.min(mcqs.length, COURSE_LIMITS.MAX_MCQS_PER_LESSON);
+  if (questionCount < minQuestions) {
+    // Written for the repair prompt: say what is wrong and what a valid question needs.
+    const problems = warnings.filter((warning) => /type "mcq"/.test(warning)).slice(0, 3);
+    return {
+      ok: false,
+      error:
+        `Only ${questionCount} valid quiz question(s); the lesson needs at least ${minQuestions}. ` +
+        'Every mcq block must have "question", ' +
+        `${COURSE_LIMITS.MIN_MCQ_OPTIONS}-${COURSE_LIMITS.MAX_MCQ_OPTIONS} distinct "options", ` +
+        'a numeric zero-based "answer" that indexes into its own options, and an "explanation".' +
+        (problems.length ? ` Problems found: ${problems.join('; ')}` : ''),
+      fallback: { value, score: questionCount },
+    };
+  }
+
+  return { ok: true, value, warnings };
 }
 
 /* ---------------------------------------------------------------- resources */

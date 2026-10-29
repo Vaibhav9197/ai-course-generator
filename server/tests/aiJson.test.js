@@ -346,6 +346,44 @@ describe('validateLesson', () => {
     expect(validateLesson({ content: [] }).ok).toBe(false);
   });
 
+  describe('minQuestions', () => {
+    // goodContent holds exactly one valid question.
+
+    it('is off by default, so a lesson with few questions still passes', () => {
+      expect(validateLesson({ content: goodContent }).ok).toBe(true);
+    });
+
+    it('fails a lesson short of questions, explaining what a valid question needs', () => {
+      const result = validateLesson(
+        { content: [...goodContent, { type: 'mcq', question: 'Broken?', answer: 'two' }] },
+        { minQuestions: 4 },
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/Only 1 valid quiz question\(s\); the lesson needs at least 4/);
+      expect(result.error).toMatch(/numeric zero-based "answer"/);
+      expect(result.error).toMatch(/Problems found: Dropped block 6 \(type "mcq"\)/);
+    });
+
+    it('still hands back the cleaned lesson as a scored fallback', () => {
+      const result = validateLesson({ content: goodContent }, { minQuestions: 4 });
+
+      expect(result.fallback.score).toBe(1);
+      expect(result.fallback.value.content).toHaveLength(goodContent.length);
+    });
+
+    it('passes once enough valid questions are present', () => {
+      const mcq = goodContent.find((b) => b.type === 'mcq');
+      const four = [1, 2, 3, 4].map((n) => ({ ...mcq, question: `Question ${n}?` }));
+      const result = validateLesson(
+        { content: [...goodContent.filter((b) => b.type !== 'mcq'), ...four] },
+        { minQuestions: 4 },
+      );
+
+      expect(result.ok).toBe(true);
+    });
+  });
+
   describe('resources', () => {
     const withResources = (resources) => validateLesson({ content: goodContent, resources });
 
