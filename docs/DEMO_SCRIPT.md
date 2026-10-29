@@ -105,7 +105,7 @@ Screen-share the editor. Walk four things, in this order:
    open invoice. Identical concurrent requests share one call, and limits are keyed on the
    user, not the IP."
 
-Then show the test summary: `npm test` → 134 server + 23 client.
+Then show the test summary: `npm test` → 147 server + 23 client.
 
 ### 4:40–5:00 — Close
 

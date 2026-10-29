@@ -28,14 +28,4 @@ ${plainText}
 Return only the Hinglish text.`;
 }
 
-/**
- * Style instruction prefixed to the TTS input.
- *
- * Gemini's TTS is promptable: a natural-language directive before the text steers pace,
- * tone and accent. Without one it tends to read technical prose too fast for a learner.
- */
-export function generateSpeechDirective(text) {
-  return `Read the following aloud as a patient teacher explaining a concept to a student. Speak clearly and at a measured pace, pronouncing English technical terms the way an Indian software engineer would. Pause briefly at sentence boundaries.\n\n${text}`;
-}
-
 export default generateTranslatePrompt;

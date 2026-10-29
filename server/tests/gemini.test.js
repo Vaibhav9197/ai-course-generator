@@ -166,6 +166,86 @@ describe('generateCourseOutline', () => {
 
     await expect(gemini.generateCourseOutline('something blocked')).rejects.toThrow(/SAFETY/);
   });
+
+  it('keeps Google’s explanation when a model is withdrawn for new keys', async () => {
+    // Real wording from the API: the model exists but this key may not use it.
+    const err = new Error(
+      '{"error":{"code":404,"message":"This model models/gemini-test-model is no longer available to new users.","status":"NOT_FOUND"}}',
+    );
+    gemini.__setClientForTests(fakeClient([err]));
+
+    await expect(gemini.generateCourseOutline('Rust')).rejects.toMatchObject({
+      status: 503,
+      message: expect.stringMatching(/GEMINI_TEXT_MODEL[\s\S]*no longer available to new users/),
+    });
+  });
+
+  it('bounds every call with an abort signal', async () => {
+    const client = fakeClient([VALID_OUTLINE]);
+    gemini.__setClientForTests(client);
+
+    await gemini.generateCourseOutline('Rust');
+
+    expect(client.calls[0].config.abortSignal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('maps a timed-out call to 504 instead of hanging or a generic failure', async () => {
+    const timeout = Object.assign(new Error('The operation was aborted due to timeout'), {
+      name: 'TimeoutError',
+    });
+    gemini.__setClientForTests(fakeClient([timeout]));
+
+    await expect(gemini.generateCourseOutline('Rust')).rejects.toMatchObject({
+      status: 504,
+      message: expect.stringMatching(/took too long/),
+    });
+  });
+});
+
+describe('synthesizeSpeech', () => {
+  function fakeSpeechClient(result) {
+    const calls = [];
+    return {
+      calls,
+      models: {
+        generateContent: vi.fn(async (request) => {
+          calls.push(request);
+          if (result instanceof Error) throw result;
+          return {
+            candidates: [{ content: { parts: [{ inlineData: result }] } }],
+          };
+        }),
+      },
+    };
+  }
+
+  it('sends the text alone, with no style preamble the model would read aloud', async () => {
+    const client = fakeSpeechClient({ data: 'AAAA', mimeType: 'audio/wav' });
+    gemini.__setClientForTests(client);
+
+    await gemini.synthesizeSpeech('Git ek version control system hai.');
+
+    expect(client.calls[0].contents).toBe('Git ek version control system hai.');
+    expect(client.calls[0].config.abortSignal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('returns the decoded audio and the reported mime type', async () => {
+    gemini.__setClientForTests(fakeSpeechClient({ data: 'AAEC', mimeType: 'audio/wav' }));
+
+    const { audio, mimeType } = await gemini.synthesizeSpeech('hello');
+
+    expect(audio).toEqual(Buffer.from([0, 1, 2]));
+    expect(mimeType).toBe('audio/wav');
+  });
+
+  it('names GEMINI_TTS_MODEL, not the text model, when the speech model is rejected', async () => {
+    const err = new Error('models/some-tts is not found for API version v1beta');
+    gemini.__setClientForTests(fakeSpeechClient(err));
+
+    await expect(gemini.synthesizeSpeech('hello')).rejects.toMatchObject({
+      message: expect.stringMatching(/GEMINI_TTS_MODEL/),
+    });
+  });
 });
 
 describe('generateLessonContent', () => {

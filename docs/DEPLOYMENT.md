@@ -49,16 +49,22 @@ MONGO_URI=mongodb+srv://…
 AUTH0_ISSUER_BASE_URL=https://your-tenant.us.auth0.com/     # trailing slash required
 AUTH0_AUDIENCE=https://text-to-learn/api
 GEMINI_API_KEY=…
-GEMINI_TEXT_MODEL=gemini-2.5-flash
-GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts
+GEMINI_TEXT_MODEL=gemini-3.5-flash-lite
+GEMINI_TTS_MODEL=gemini-3.8-flash-lite-tts
 YOUTUBE_API_KEY=…
 CLIENT_ORIGIN=https://placeholder.vercel.app                 # corrected in step 4
 ```
 
-> **Confirm the model IDs before deploying.** Gemini identifiers change and every TTS model
-> is still preview-tagged. Check <https://ai.google.dev/gemini-api/docs/models> and use the
-> current values. A stale ID produces a 503 that names `GEMINI_TEXT_MODEL` or
-> `GEMINI_TTS_MODEL`, so the error tells you which variable to fix.
+> **Confirm the model IDs before deploying.** Gemini identifiers change, and older models are
+> withdrawn for new API keys (`gemini-2.5-flash` now returns "no longer available to new
+> users"). Check <https://ai.google.dev/gemini-api/docs/models> and use current values. A
+> rejected ID produces a 503 that names `GEMINI_TEXT_MODEL` or `GEMINI_TTS_MODEL` and quotes
+> Google's reason, so the error tells you which variable to fix.
+>
+> **On the free tier, prefer Flash-Lite.** Third-party reports put `gemini-3.8-flash` at
+> roughly 20 requests/day versus about 500 for the Flash-Lite models; a single course can
+> need 30+ requests. TTS quotas are far smaller still. Check your project's real limits in
+> Google AI Studio.
 
 In production the server **requires** `MONGO_URI`, both Auth0 values and `GEMINI_API_KEY`,
 and refuses to start without them. That is intentional: the unauthenticated development

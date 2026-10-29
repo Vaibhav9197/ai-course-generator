@@ -115,9 +115,17 @@ production — a public URL must never reach it.
 
 ## Notable engineering constraints
 
-**Gemini model IDs are env-driven, never hardcoded.** Identifiers churn quickly and all TTS
-models are still preview-tagged. Confirm current values at
-<https://ai.google.dev/gemini-api/docs/models>.
+**Gemini model IDs are env-driven, never hardcoded.** Identifiers churn quickly and older
+models are withdrawn for new API keys, which is exactly what happened to `gemini-2.5-flash`.
+Confirm current values at <https://ai.google.dev/gemini-api/docs/models>.
+
+**TTS output format varies by model.** Older TTS models return headerless PCM
+(`audio/L16;rate=24000`); current ones return a complete WAV. `toWav` in `wav.service.js`
+wraps the first and passes the second through. Current models also speak any style
+instruction placed before the text, so the narration text is sent on its own.
+
+**Every Gemini call has a time limit** (45 s for text, 60 s for speech) via an `AbortSignal`,
+mapped to a 504. Without it a stalled call hangs until the browser gives up.
 
 **AI JSON is hardened in layers.** `responseMimeType: 'application/json'` plus a
 `responseSchema` makes markdown-fenced output structurally impossible, but the model can

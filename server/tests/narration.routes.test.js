@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import request from 'supertest';
 import { startMemoryDb, stopMemoryDb, clearCollections } from './helpers/memoryDb.js';
 import { clearInFlight } from '../utils/inFlight.js';
-import { WAV_HEADER_BYTES } from '../services/wav.service.js';
+import { WAV_HEADER_BYTES, pcmToWav } from '../services/wav.service.js';
 
 /**
  * Verifies the caching split that the narration design depends on: translated text is
@@ -60,7 +60,7 @@ beforeEach(() => {
   lessonMock.mockReset().mockResolvedValue(LESSON);
   translateMock.mockReset().mockResolvedValue(HINGLISH);
   speechMock.mockReset().mockResolvedValue({
-    pcm: PCM,
+    audio: PCM,
     mimeType: 'audio/L16;codec=pcm;rate=24000',
   });
   clearInFlight();
@@ -154,6 +154,26 @@ describe('POST /api/lessons/:id/audio', () => {
     expect(res.body.toString('ascii', 0, 4)).toBe('RIFF');
     expect(res.body.toString('ascii', 8, 12)).toBe('WAVE');
     expect(res.body.readUInt32LE(24)).toBe(24_000);
+  });
+
+  it('passes a model-supplied WAV through without a second header', async () => {
+    // Current TTS models return a complete WAV rather than raw PCM.
+    const ready = pcmToWav(PCM);
+    speechMock.mockResolvedValue({ audio: ready, mimeType: 'audio/wav' });
+    const id = await enrichedLessonId();
+
+    const res = await request(app)
+      .post(`/api/lessons/${id}/audio`)
+      .send({ language: 'hinglish' })
+      .buffer()
+      .parse((response, callback) => {
+        const chunks = [];
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.equals(ready)).toBe(true);
   });
 
   it('narrates the Hinglish translation, not the English source', async () => {
