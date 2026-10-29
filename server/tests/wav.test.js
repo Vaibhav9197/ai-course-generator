@@ -3,6 +3,9 @@ import {
   pcmToWav,
   parseAudioMimeType,
   pcmDurationSeconds,
+  isWav,
+  toWav,
+  wavDurationSeconds,
   WAV_HEADER_BYTES,
   GEMINI_TTS_AUDIO,
 } from '../services/wav.service.js';
@@ -118,5 +121,46 @@ describe('pcmDurationSeconds', () => {
 
   it('returns zero for empty audio', () => {
     expect(pcmDurationSeconds(Buffer.alloc(0))).toBe(0);
+  });
+});
+
+describe('isWav', () => {
+  it('recognises a RIFF/WAVE header', () => {
+    expect(isWav(pcmToWav(PCM))).toBe(true);
+  });
+
+  it('rejects raw PCM, short buffers and non-buffers', () => {
+    expect(isWav(PCM)).toBe(false);
+    expect(isWav(Buffer.from('RIFF'))).toBe(false);
+    expect(isWav('RIFF....WAVE')).toBe(false);
+  });
+});
+
+describe('toWav', () => {
+  it('wraps headerless PCM using the rate from the mime type', () => {
+    const wav = toWav(PCM, 'audio/L16;codec=pcm;rate=16000');
+
+    expect(wav.length).toBe(WAV_HEADER_BYTES + PCM.length);
+    expect(wav.readUInt32LE(24)).toBe(16_000);
+  });
+
+  it('returns an existing WAV unchanged rather than adding a second header', () => {
+    // Current Gemini TTS models send `audio/wav`, header included.
+    const ready = pcmToWav(PCM);
+    const out = toWav(ready, 'audio/wav');
+
+    expect(out).toBe(ready);
+    expect(out.toString('ascii', WAV_HEADER_BYTES, WAV_HEADER_BYTES + 4)).not.toBe('RIFF');
+  });
+});
+
+describe('wavDurationSeconds', () => {
+  it('reads the duration from the header byte rate', () => {
+    // One second of 24kHz/16-bit/mono is 48000 bytes.
+    expect(wavDurationSeconds(pcmToWav(Buffer.alloc(48_000)))).toBeCloseTo(1, 5);
+  });
+
+  it('returns zero for anything that is not a WAV', () => {
+    expect(wavDurationSeconds(Buffer.alloc(48_000))).toBe(0);
   });
 });

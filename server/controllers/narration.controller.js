@@ -1,6 +1,6 @@
 import { Course, Lesson, Module } from '../models/index.js';
 import { translateToHinglish, synthesizeSpeech } from '../services/gemini.service.js';
-import { pcmToWav, parseAudioMimeType, pcmDurationSeconds } from '../services/wav.service.js';
+import { toWav, wavDurationSeconds } from '../services/wav.service.js';
 import { currentUserSub } from '../middlewares/auth.js';
 import { ApiError, asyncHandler } from '../utils/ApiError.js';
 import { runOnce } from '../utils/inFlight.js';
@@ -104,12 +104,11 @@ export const narrateLesson = asyncHandler(async (req, res) => {
 
   if (!text) throw ApiError.badRequest('This lesson has no narratable text yet.');
 
-  const { pcm, mimeType } = await synthesizeSpeech(text, { voiceName: req.body?.voice });
-  const format = parseAudioMimeType(mimeType);
-  const wav = pcmToWav(pcm, format);
+  const { audio, mimeType } = await synthesizeSpeech(text, { voiceName: req.body?.voice });
+  const wav = toWav(audio, mimeType);
 
   console.log(
-    `[narration] lesson ${lesson._id} ${language}: ${Math.round(pcmDurationSeconds(pcm, format))}s, ${Math.round(wav.length / 1024)}kB`,
+    `[narration] lesson ${lesson._id} ${language}: ${Math.round(wavDurationSeconds(wav))}s, ${Math.round(wav.length / 1024)}kB`,
   );
 
   const filename = `${slug(course.title)}--${slug(lesson.title)}-${language}.wav`;

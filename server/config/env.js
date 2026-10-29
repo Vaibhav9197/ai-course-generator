@@ -1,13 +1,18 @@
 import dotenv from 'dotenv';
 
-dotenv.config();
+// Tests must never see a developer's real server/.env: a test that stubs Gemini would
+// otherwise pass or fail depending on local keys, and a missed stub could spend real quota.
+if (process.env.NODE_ENV !== 'test') {
+  dotenv.config();
+}
 
 /**
  * Centralised, validated configuration.
  *
  * Model IDs are deliberately env-driven rather than hardcoded: Gemini model
- * identifiers churn quickly (TTS models are still preview-tagged), so pinning them
- * in source guarantees a future breakage. See README for how to confirm live IDs.
+ * identifiers churn quickly and older ones are withdrawn for new API keys (2.5 Flash
+ * was), so pinning them in source guarantees a future breakage. The defaults are
+ * Flash-Lite models because they carry the most generous free-tier quotas.
  */
 
 function required(name) {
@@ -38,8 +43,8 @@ export const env = {
 
   gemini: {
     apiKey: optional('GEMINI_API_KEY', ''),
-    textModel: optional('GEMINI_TEXT_MODEL', 'gemini-2.5-flash'),
-    ttsModel: optional('GEMINI_TTS_MODEL', 'gemini-2.5-flash-preview-tts'),
+    textModel: optional('GEMINI_TEXT_MODEL', 'gemini-3.5-flash-lite'),
+    ttsModel: optional('GEMINI_TTS_MODEL', 'gemini-3.8-flash-lite-tts'),
     ttsVoice: optional('GEMINI_TTS_VOICE', 'Kore'),
   },
 

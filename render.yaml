@@ -39,13 +39,13 @@ services:
       - key: GEMINI_API_KEY
         sync: false
 
-      # Model IDs are env-driven because Gemini identifiers change often and all TTS
-      # models are still preview-tagged. Confirm current values at
-      # https://ai.google.dev/gemini-api/docs/models before deploying.
+      # Model IDs are env-driven because Gemini identifiers change often and older ones
+      # are withdrawn for new API keys. Flash-Lite has the largest free-tier quota.
+      # Confirm current values at https://ai.google.dev/gemini-api/docs/models.
       - key: GEMINI_TEXT_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.5-flash-lite
       - key: GEMINI_TTS_MODEL
-        value: gemini-2.5-flash-preview-tts
+        value: gemini-3.8-flash-lite-tts
 
       - key: YOUTUBE_API_KEY
         sync: false

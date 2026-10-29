@@ -40,6 +40,10 @@ export class ApiError extends Error {
   static serviceUnavailable(message = 'Service unavailable.', options) {
     return new ApiError(503, message, options);
   }
+
+  static gatewayTimeout(message = 'Upstream service timed out.', options) {
+    return new ApiError(504, message, options);
+  }
 }
 
 /** Wraps an async route handler so rejected promises reach the error middleware. */

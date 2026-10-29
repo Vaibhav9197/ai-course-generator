@@ -4,19 +4,29 @@ import { ApiError } from '../utils/ApiError.js';
 import { COURSE_OUTLINE_SCHEMA, LESSON_SCHEMA } from './geminiSchemas.js';
 import { generateCoursePrompt } from './prompts/coursePrompt.js';
 import { generateLessonPrompt, generateRepairPrompt } from './prompts/lessonPrompt.js';
-import {
-  generateTranslatePrompt,
-  generateSpeechDirective,
-} from './prompts/translatePrompt.js';
+import { generateTranslatePrompt } from './prompts/translatePrompt.js';
 import { parseJsonLoose, validateOutline, validateLesson } from './aiJson.service.js';
 
 /**
  * Gemini integration.
  *
  * Model IDs come from the environment, never from source: Gemini identifiers change
- * frequently and all TTS models are still preview-tagged, so a hardcoded string is a
+ * frequently and older ones are withdrawn for new API keys, so a hardcoded string is a
  * guaranteed future outage. See server/.env.example.
  */
+
+/**
+ * Per-call ceiling. The SDK otherwise waits indefinitely, and a stalled call was observed
+ * hanging for minutes. Text generation can make two attempts, so 2 × 45s stays inside the
+ * client's 120s axios timeout and the user sees a real error instead of a dead spinner.
+ *
+ * Aborting is client-side only: the upstream call may still complete and be billed.
+ */
+const TEXT_TIMEOUT_MS = 45_000;
+const SPEECH_TIMEOUT_MS = 60_000;
+
+const TEXT_MODEL_SETTING = { model: () => env.gemini.textModel, envVar: 'GEMINI_TEXT_MODEL' };
+const TTS_MODEL_SETTING = { model: () => env.gemini.ttsModel, envVar: 'GEMINI_TTS_MODEL' };
 
 let client = null;
 
@@ -58,10 +68,11 @@ async function generateText({ prompt, responseSchema, temperature = 0.7, maxOutp
         ...(responseSchema ? { responseSchema } : {}),
         temperature,
         ...(maxOutputTokens ? { maxOutputTokens } : {}),
+        abortSignal: AbortSignal.timeout(TEXT_TIMEOUT_MS),
       },
     });
   } catch (err) {
-    throw mapUpstreamError(err);
+    throw mapUpstreamError(err, TEXT_MODEL_SETTING);
   }
 
   const text = response?.text;
@@ -78,10 +89,21 @@ async function generateText({ prompt, responseSchema, temperature = 0.7, maxOutp
   return text;
 }
 
-function mapUpstreamError(err) {
+/**
+ * @param {unknown} err
+ * @param {{ model: () => string, envVar: string }} setting Which model setting the failed
+ *   call used, so a rejected ID names the variable that actually needs changing.
+ */
+function mapUpstreamError(err, setting = TEXT_MODEL_SETTING) {
   const message = String(err?.message ?? err);
   const status = err?.status ?? err?.code;
 
+  if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+    return ApiError.gatewayTimeout(
+      'The AI service took too long to respond. Please try again in a moment.',
+      { cause: err },
+    );
+  }
   if (status === 429 || /quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(message)) {
     return ApiError.tooManyRequests(
       'The AI service rate limit was reached. Please wait a minute and try again.',
@@ -94,10 +116,13 @@ function mapUpstreamError(err) {
       { cause: err },
     );
   }
-  if (/NOT_FOUND|is not found|not supported/i.test(message)) {
+  if (/NOT_FOUND|is not found|not supported|no longer available/i.test(message)) {
+    // Google's own wording is kept: "unknown" and "withdrawn for new keys" need different
+    // fixes, and the upstream message says which one this is.
     return ApiError.serviceUnavailable(
-      `The configured AI model ("${env.gemini.textModel}") was rejected as unknown. ` +
-        'Confirm the current model IDs at ai.google.dev/gemini-api/docs/models and update GEMINI_TEXT_MODEL.',
+      `The configured AI model ("${setting.model()}") was rejected. ` +
+        `Confirm the current model IDs at ai.google.dev/gemini-api/docs/models and update ${setting.envVar}. ` +
+        `Upstream said: ${message.slice(0, 300)}`,
       { cause: err },
     );
   }
@@ -204,10 +229,10 @@ export async function translateToHinglish({ lessonTitle, plainText }) {
       model: env.gemini.textModel,
       contents: generateTranslatePrompt(lessonTitle, plainText),
       // Low temperature: this is a translation, and invention is the failure mode.
-      config: { temperature: 0.3 },
+      config: { temperature: 0.3, abortSignal: AbortSignal.timeout(TEXT_TIMEOUT_MS) },
     });
   } catch (err) {
-    throw mapUpstreamError(err);
+    throw mapUpstreamError(err, TEXT_MODEL_SETTING);
   }
 
   const text = response?.text?.trim();
@@ -221,10 +246,15 @@ export async function translateToHinglish({ lessonTitle, plainText }) {
 /**
  * Synthesises speech from text.
  *
- * Returns raw PCM plus the format Gemini reported, for wav.service.js to wrap. The TTS
- * models are all still preview-tagged, which is why the model ID is env-driven.
+ * Returns the audio bytes plus the mime type Gemini reported. Depending on the model these
+ * are headerless PCM (`audio/L16;rate=24000`) or an already complete WAV (`audio/wav`);
+ * wav.service.js `toWav` handles both.
  *
- * @returns {Promise<{ pcm: Buffer, mimeType: string }>}
+ * The text is sent with no style preamble. Older TTS models treated a leading instruction
+ * ("read this as a patient teacher…") as direction, but current ones speak it aloud before
+ * the lesson. Tone comes from the prebuilt voice instead.
+ *
+ * @returns {Promise<{ audio: Buffer, mimeType: string }>}
  */
 export async function synthesizeSpeech(text, { voiceName } = {}) {
   const ai = getClient();
@@ -237,7 +267,7 @@ export async function synthesizeSpeech(text, { voiceName } = {}) {
   try {
     response = await ai.models.generateContent({
       model: env.gemini.ttsModel,
-      contents: generateSpeechDirective(text),
+      contents: text,
       config: {
         responseModalities: ['AUDIO'],
         speechConfig: {
@@ -245,10 +275,11 @@ export async function synthesizeSpeech(text, { voiceName } = {}) {
             prebuiltVoiceConfig: { voiceName: voiceName || env.gemini.ttsVoice },
           },
         },
+        abortSignal: AbortSignal.timeout(SPEECH_TIMEOUT_MS),
       },
     });
   } catch (err) {
-    throw mapUpstreamError(err);
+    throw mapUpstreamError(err, TTS_MODEL_SETTING);
   }
 
   const part = response?.candidates?.[0]?.content?.parts?.find((item) => item.inlineData?.data);
@@ -261,7 +292,7 @@ export async function synthesizeSpeech(text, { voiceName } = {}) {
   }
 
   return {
-    pcm: Buffer.from(part.inlineData.data, 'base64'),
+    audio: Buffer.from(part.inlineData.data, 'base64'),
     mimeType: part.inlineData.mimeType ?? '',
   };
 }

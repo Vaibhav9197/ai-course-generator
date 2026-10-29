@@ -1,9 +1,10 @@
 /**
  * Wraps raw PCM in a WAV container.
  *
- * Gemini's TTS models return base64 **headerless** PCM — signed 16-bit little-endian,
+ * Older Gemini TTS models return base64 **headerless** PCM — signed 16-bit little-endian,
  * 24 kHz, mono. Browsers and audio players cannot play that: without a container there is
- * nothing to tell them the sample rate or bit depth, so the bytes are just noise.
+ * nothing to tell them the sample rate or bit depth, so the bytes are just noise. Current
+ * models return a complete WAV instead; `toWav` accepts either.
  *
  * A WAV header is 44 bytes of fixed-layout metadata, so building one is cheaper and more
  * reliable than pulling in an encoding library.
@@ -89,4 +90,35 @@ export function parseAudioMimeType(mimeType) {
 export function pcmDurationSeconds(pcm, format = GEMINI_TTS_AUDIO) {
   const bytesPerSecond = format.sampleRate * format.channels * (format.bitsPerSample / 8);
   return bytesPerSecond > 0 ? pcm.length / bytesPerSecond : 0;
+}
+
+/** True when the bytes already start with a RIFF/WAVE header. */
+export function isWav(buffer) {
+  return (
+    Buffer.isBuffer(buffer) &&
+    buffer.length >= WAV_HEADER_BYTES &&
+    buffer.toString('ascii', 0, 4) === 'RIFF' &&
+    buffer.toString('ascii', 8, 12) === 'WAVE'
+  );
+}
+
+/**
+ * Returns a playable .wav for whatever the TTS model sent.
+ *
+ * A file that is already WAV passes through untouched: wrapping it again would play the
+ * inner 44-byte header as a click and make every length calculation wrong.
+ */
+export function toWav(audio, mimeType) {
+  if (isWav(audio)) return audio;
+  return pcmToWav(audio, parseAudioMimeType(mimeType));
+}
+
+/**
+ * Approximate duration of a WAV, from the byte rate in its own header. Assumes the
+ * canonical 44-byte layout, which is close enough for a log line.
+ */
+export function wavDurationSeconds(wav) {
+  if (!isWav(wav)) return 0;
+  const byteRate = wav.readUInt32LE(28);
+  return byteRate > 0 ? (wav.length - WAV_HEADER_BYTES) / byteRate : 0;
 }
