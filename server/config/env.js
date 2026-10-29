@@ -52,6 +52,12 @@ export const env = {
     apiKey: optional('YOUTUBE_API_KEY', ''),
   },
 
+  /**
+   * Directory holding a built frontend for this server to serve. Defaults to ../public,
+   * which only the Embarko single-app package creates; set mainly by tests.
+   */
+  clientDistDir: optional('CLIENT_DIST_DIR', ''),
+
   /** Comma-separated list of allowed browser origins. */
   clientOrigins: optional('CLIENT_ORIGIN', 'http://localhost:5173')
     .split(',')

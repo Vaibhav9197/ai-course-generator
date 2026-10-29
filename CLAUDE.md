@@ -30,7 +30,7 @@ Run from the repo root unless noted.
 ```bash
 npm run install:all     # root + server + client
 npm run dev             # API :5000 and client :5173 (Vite proxies /api → :5000)
-npm test                # server (171 tests) then client (30 tests)
+npm test                # server (181 tests) then client (30 tests)
 npm run lint            # ESLint in both packages
 npm run seed            # insert fixture course, no Gemini tokens (-- --force to replace)
 
@@ -169,8 +169,19 @@ testing. List what a key can use with `ai.models.list()`.
 - Render builds `server/` from `render.yaml` (health check `/api/health`; secrets `sync: false`).
 - Vercel builds from the **repo root** via `vercel.json` (building from `client/` would drop
   `shared/` from the build context). SPA rewrite to `index.html`.
-- CORS allows `CLIENT_ORIGIN` (comma-separated) plus any `https://*.vercel.app`.
+- CORS allows `CLIENT_ORIGIN` (comma-separated), any `https://*.vercel.app`, and same-origin
+  requests (the SPA served by the server itself).
 - `runOnce` and rate-limit counters are in-memory: correct only for a single instance.
+- **Live:** Vercel `https://ai-course-generator-xi-topaz.vercel.app`, Render
+  `https://text-to-learn-backend-kzhq.onrender.com`, Embarko
+  `https://ai-course-generator.embarko.app`. Render and Vercel redeploy on merge to `main`.
+- **Embarko (single app):** `npm run package:embarko` (scripts/package-embarko.mjs) builds
+  `.embarko-build/`: server deps at the root, `server/` + `shared/`, the client built with an
+  empty `VITE_API_URL` in `public/`. `server/app.js` serves `public/` only when it exists (and
+  then drops Helmet's CSP), so Render is unaffected. Deploy with the Embarko skill's
+  `deploy.sh` (token in `~/.embarko/credentials`); secrets are Embarko env vars, never files.
+  No auto-deploy: re-run after merging. Never interpolate Markdown containing backticks into
+  a double-quoted shell string — bash executes them as command substitution.
 
 ## Known issues (verified by reading the code, not yet fixed)
 

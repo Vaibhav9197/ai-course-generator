@@ -127,6 +127,39 @@ merge to `main`.
 Working style, per the brief: branch per feature, open a PR, let CI go green, merge with
 `--no-ff` so the history shows each feature as a unit.
 
+## Alternative: Embarko (single app)
+
+Embarko deploys **one folder as one app** and installs dependencies only at that folder's
+root, while this repo is a client + server pair that both import `../shared`. Rather than
+restructure the repo, `npm run package:embarko` assembles `.embarko-build/` (git-ignored):
+
+| Path | Contents |
+|---|---|
+| `package.json` | Server dependencies only, `"start": "node server/server.js"`, no build script |
+| `package-lock.json` | The server lock pruned to production deps with npm 10 (no 600 MB test binary) |
+| `server/`, `shared/` | Unchanged, at the same relative paths the imports expect |
+| `public/` | The client built with an **empty `VITE_API_URL`**, so it calls its own origin |
+| `embarko.json` | The Embarko app id |
+
+When `public/index.html` exists, `server/app.js` serves the SPA (hashed assets cached for a
+year, `index.html` for every non-`/api` path) and drops Helmet's CSP for parity with
+Vercel. Same-origin requests pass CORS automatically. On Render the folder doesn't exist,
+so nothing changes there.
+
+```bash
+npm run package:embarko        # Auth0 values come from client/.env
+bash <embarko-skill>/scripts/deploy.sh .embarko-build ai-course-generator <unique-version>
+```
+
+Server secrets are never in the upload. Set them once through Embarko's env-vars API (or
+the app's Environment page) and apply: `MONGO_URI`, `AUTH0_ISSUER_BASE_URL`,
+`AUTH0_AUDIENCE`, `GEMINI_API_KEY`, `YOUTUBE_API_KEY`, `NODE_ENV=production`, and
+`CLIENT_ORIGIN` set to the Embarko URL. Then add the Embarko URL to the Auth0 application's
+callback (`/callback`), logout and web-origin lists, exactly as for Vercel.
+
+Unlike Render and Vercel, Embarko does not redeploy on merge: re-run both commands after a
+change. Each deploy needs a unique version string.
+
 ## Cold starts
 
 Render's free tier suspends after ~15 minutes idle and takes roughly 50 seconds to wake.

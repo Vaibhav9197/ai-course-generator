@@ -24,3 +24,6 @@ Thumbs.db
 
 # Local interview notes, not part of the project
 Text-to-Learn Interview Guide.html
+
+# Single-app Embarko upload folder (npm run package:embarko)
+.embarko-build/
