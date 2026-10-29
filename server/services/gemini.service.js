@@ -123,8 +123,13 @@ function mapUpstreamError(err, setting = TEXT_MODEL_SETTING) {
       { cause: err, code: AI_TIMEOUT },
     );
   }
-  // Google's "model is currently experiencing high demand": temporary by its own wording.
-  if (status === 503 || /UNAVAILABLE|high demand|overloaded/i.test(message)) {
+  // Google's "model is currently experiencing high demand", and its "500 Internal error"
+  // during the same incidents: both are temporary, and Google's guidance is to retry.
+  if (
+    status === 503 ||
+    status === 500 ||
+    /UNAVAILABLE|high demand|overloaded|"status":\s*"INTERNAL"/i.test(message)
+  ) {
     return ApiError.serviceUnavailable(
       'The AI service is busy right now. Please try again in a minute.',
       { cause: err, code: AI_BUSY },

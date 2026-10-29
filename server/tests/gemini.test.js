@@ -258,6 +258,20 @@ describe('generateCourseOutline', () => {
     expect(client.calls).toHaveLength(2);
   });
 
+  it('retries Google’s transient "500 Internal error" the same way', async () => {
+    const internal = Object.assign(
+      new Error('{"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}'),
+      { status: 500 },
+    );
+    const client = fakeClient([internal, VALID_OUTLINE]);
+    gemini.__setClientForTests(client);
+
+    await expect(gemini.generateCourseOutline('Rust')).resolves.toMatchObject({
+      title: 'Introduction to Rust',
+    });
+    expect(client.calls).toHaveLength(2);
+  });
+
   it('reports a readable "busy" 503 rather than raw upstream JSON when it persists', async () => {
     gemini.__setClientForTests(fakeClient([highDemand(), highDemand()]));
 

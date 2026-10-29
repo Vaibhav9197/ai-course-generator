@@ -79,7 +79,12 @@ const lessonSchema = new mongoose.Schema(
 
 lessonSchema.plugin(serializePlugin);
 
-/** Marks the lesson enriched and clears any previous failure in one write. */
+/**
+ * Marks the lesson enriched and clears any previous failure in one write.
+ *
+ * Also drops the cached Hinglish translation: it was made from the old content, and on a
+ * regenerate it would otherwise be narrated over a lesson it no longer matches.
+ */
 lessonSchema.methods.applyEnrichment = function applyEnrichment({
   objectives,
   content,
@@ -90,6 +95,7 @@ lessonSchema.methods.applyEnrichment = function applyEnrichment({
   this.resources = resources ?? [];
   this.isEnriched = true;
   this.enrichError = undefined;
+  this.set('translations.hinglish', undefined);
   return this.save();
 };
 

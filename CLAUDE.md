@@ -30,7 +30,7 @@ Run from the repo root unless noted.
 ```bash
 npm run install:all     # root + server + client
 npm run dev             # API :5000 and client :5173 (Vite proxies /api → :5000)
-npm test                # server (169 tests) then client (30 tests)
+npm test                # server (171 tests) then client (30 tests)
 npm run lint            # ESLint in both packages
 npm run seed            # insert fixture course, no Gemini tokens (-- --force to replace)
 
@@ -131,8 +131,9 @@ calls `warmUpBackend()` to wake Render's cold start.
     always go through `toWav()` (wav.service.js), never `pcmToWav()` directly.
 17. **Every Gemini call carries an `httpOptions.timeout`** (`TEXT_TIMEOUT_MS` 30 s,
     `SPEECH_TIMEOUT_MS` 60 s in gemini.service.js); timeouts and Google's own
-    `504 Deadline expired` map to 504 (`code: ai_timeout`), `503 high demand` maps to a
-    readable 503 (`code: ai_busy`), and `generateValidated` resends either once. Free-tier
+    `504 Deadline expired` map to 504 (`code: ai_timeout`), `503 high demand` and
+    `500 INTERNAL` map to a readable 503 (`code: ai_busy`), and `generateValidated` resends
+    either once. Free-tier
     calls intermittently stall or get rejected under load, so this is load-bearing. Keep
     2 × text timeout under the client's 120 s axios timeout.
 18. **Lessons are validated with `minQuestions: 4`.** Too few valid MCQs fails validation and
@@ -173,8 +174,6 @@ testing. List what a key can use with `ai.models.list()`.
 
 ## Known issues (verified by reading the code, not yet fixed)
 
-- **Stale Hinglish after regenerate:** `Lesson.applyEnrichment()` doesn't clear
-  `translations.hinglish`, so narration of a regenerated lesson uses the old text.
 - **`docs/API.md` is wrong about lesson failure:** it says the lesson is returned with
   `enrichError`; the code returns 502 and persists `enrichError` (asserted in
   `tests/generate.routes.test.js`).
