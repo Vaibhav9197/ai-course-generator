@@ -57,6 +57,23 @@ export const enrichedLessons = {
       'Identify which class lifecycle methods map onto which hooks.',
       'Recognise when a function component is the better default.',
     ],
+    resources: [
+      {
+        title: 'React docs: Introducing Hooks (legacy docs)',
+        kind: 'documentation',
+        query: 'legacy.reactjs.org Introducing Hooks motivation',
+      },
+      {
+        title: 'React docs: Built-in React Hooks',
+        kind: 'documentation',
+        query: 'react.dev reference built-in react hooks',
+      },
+      {
+        title: 'React Conf 2018: React Today and Tomorrow',
+        kind: 'course',
+        query: 'React Conf 2018 React Today and Tomorrow hooks talk',
+      },
+    ],
     content: [
       { type: 'heading', text: 'The problem with classes', level: 2 },
       {
@@ -196,6 +213,18 @@ export const enrichedLessons = {
       'State the two rules of hooks and the reason behind them.',
       'Spot a conditional hook call and correct it.',
       'Use the ESLint plugin to catch violations automatically.',
+    ],
+    resources: [
+      {
+        title: 'React docs: Rules of Hooks',
+        kind: 'documentation',
+        query: 'react.dev reference rules of hooks',
+      },
+      {
+        title: 'eslint-plugin-react-hooks',
+        kind: 'tool',
+        query: 'eslint-plugin-react-hooks npm',
+      },
     ],
     content: [
       { type: 'heading', text: 'Two rules, one reason', level: 2 },

@@ -1,4 +1,8 @@
-import { COURSE_LIMITS, SUPPORTED_CODE_LANGUAGES } from '../../../shared/contentBlocks.js';
+import {
+  COURSE_LIMITS,
+  RESOURCE_KINDS,
+  SUPPORTED_CODE_LANGUAGES,
+} from '../../../shared/contentBlocks.js';
 
 /**
  * Prompt for stage 2 of generation: one lesson's body.
@@ -84,6 +88,17 @@ STYLE
 - No summary or "conclusion" block at the end.
 - Do not address the reader as "we". Use "you" or the imperative.
 - Where a real-world detail matters (a version, a limit, a gotcha), say it specifically.
+
+RESOURCES
+Separately from the content blocks, return ${COURSE_LIMITS.MIN_RESOURCES} to ${COURSE_LIMITS.MAX_RESOURCES} "resources" for further reading on THIS lesson:
+  { "title": "...", "kind": "...", "query": "..." }
+- title names a specific, real source that already exists: a section of official
+  documentation, a standard book, a well-known course or tool. Never invent a source, an
+  author or a book title. If you are not sure a source exists, leave it out.
+- Prefer official documentation and primary sources over blog posts.
+- kind is one of: ${RESOURCE_KINDS.join(', ')}.
+- query is the phrase someone would type into a web search to find that exact source,
+  e.g. "MDN Array.prototype.map". It must NEVER be a URL.
 
 Return the lesson as JSON matching the provided schema. Return only the JSON object.`;
 }

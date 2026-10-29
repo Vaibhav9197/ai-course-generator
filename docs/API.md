@@ -149,6 +149,9 @@ persists the result. Every later request is served from the database.
     "id": "6a70...",
     "title": "The Rules of Hooks",
     "objectives": ["State the two rules of hooks", "…"],
+    "resources": [
+      { "title": "React docs: Rules of Hooks", "kind": "documentation", "query": "react.dev reference rules of hooks" }
+    ],
     "isEnriched": true,
     "content": [
       { "type": "heading", "text": "Two rules, one reason", "level": 2 },

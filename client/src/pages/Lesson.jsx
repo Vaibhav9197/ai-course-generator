@@ -17,6 +17,7 @@ import { useFetch } from '../hooks/useApi.js';
 import LessonRenderer from '../components/LessonRenderer.jsx';
 import LessonPDFExporter from '../components/LessonPDFExporter.jsx';
 import HinglishPlayer from '../components/HinglishPlayer.jsx';
+import ResourceList from '../components/ResourceList.jsx';
 import LoadingSpinner from '../components/LoadingSpinner.jsx';
 import ErrorMessage from '../components/ErrorMessage.jsx';
 
@@ -132,6 +133,8 @@ export default function Lesson() {
         ) : (
           !lesson.enrichError && <PendingLesson />
         )}
+
+        {lesson.isEnriched && <ResourceList resources={lesson.resources} />}
 
         <Separator />
 

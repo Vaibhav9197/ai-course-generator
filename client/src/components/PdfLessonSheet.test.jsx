@@ -31,6 +31,9 @@ const LESSON = {
     { type: 'mcq', question: 'Second question?', options: ['a', 'b'], answer: 0, explanation: 'x' },
     { type: 'some-future-block', text: 'should be skipped' },
   ],
+  resources: [
+    { title: 'React docs: Rules of Hooks', kind: 'documentation', query: 'react.dev rules of hooks' },
+  ],
 };
 
 function renderSheet(overrides = {}) {
@@ -126,5 +129,18 @@ describe('PdfLessonSheet', () => {
   it('omits the objectives panel when the lesson has none', () => {
     renderSheet({ objectives: [] });
     expect(screen.queryByText('What you will learn')).not.toBeInTheDocument();
+  });
+
+  it('prints the further-reading list with what to search for, since a PDF cannot link', () => {
+    renderSheet();
+
+    expect(screen.getByRole('heading', { name: 'Further reading' })).toBeInTheDocument();
+    expect(screen.getByText('React docs: Rules of Hooks')).toBeInTheDocument();
+    expect(screen.getByText(/search for “react\.dev rules of hooks”/)).toBeInTheDocument();
+  });
+
+  it('omits the further-reading section when the lesson has no resources', () => {
+    renderSheet({ resources: [] });
+    expect(screen.queryByText('Further reading')).not.toBeInTheDocument();
   });
 });

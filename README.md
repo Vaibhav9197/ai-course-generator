@@ -22,7 +22,8 @@ interactive quizzes), Hinglish audio narration, and PDF export for offline study
 2. One AI call designs the syllabus: 3–6 modules of 3–5 lessons, ordered so each builds on
    the last. Saved immediately, in about 5–10 seconds.
 3. Opening a lesson for the first time writes it: objectives, explanatory prose, code
-   examples where relevant, a suggested video, and 4–5 quiz questions with explanations.
+   examples where relevant, a suggested video, 4–5 quiz questions with explanations, and
+   2–4 suggested readings (real sources, linked as web searches so links never go dead).
    Cached forever after, so it is generated exactly once.
 4. Any lesson can be narrated in Hinglish or downloaded as a formatted PDF.
 
@@ -126,7 +127,7 @@ fed back to the model.
 ## Testing
 
 ```bash
-npm test             # 147 server + 23 client
+npm test             # 158 server + 30 client
 ```
 
 The server suite runs against `mongodb-memory-server`, so it needs no Atlas cluster and no

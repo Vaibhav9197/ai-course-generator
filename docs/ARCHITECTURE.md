@@ -83,7 +83,7 @@ frontend route is index-based (`/courses/:courseId/module/:moduleIndex/lesson/:l
 | `User` | `auth0Sub` (unique), `email`, `name`, `prefs` | `auth0Sub` |
 | `Course` | `title`, `description`, `creator` (Auth0 `sub`), `topicPrompt`, `tags[]`, `modules[ref]`, `status` | `creator + createdAt` |
 | `Module` | `title`, `course` (ref), `lessons[ref]` | `course` |
-| `Lesson` | `title`, `objectives[]`, `content[]`, `isEnriched`, `enrichError`, `module` (ref), `translations.hinglish` | `module` |
+| `Lesson` | `title`, `objectives[]`, `resources[]`, `content[]`, `isEnriched`, `enrichError`, `module` (ref), `translations.hinglish` | `module` |
 | `VideoCache` | `queryKey` (normalised, unique), `videoId`, `title` | `queryKey` |
 
 ## API surface
@@ -124,8 +124,18 @@ Confirm current values at <https://ai.google.dev/gemini-api/docs/models>.
 wraps the first and passes the second through. Current models also speak any style
 instruction placed before the text, so the narration text is sent on its own.
 
-**Every Gemini call has a time limit** (45 s for text, 60 s for speech) via an `AbortSignal`,
-mapped to a 504. Without it a stalled call hangs until the browser gives up.
+**Every Gemini call has a time limit** (30 s for text, 60 s for speech) via the SDK's
+`httpOptions.timeout`, mapped to a 504. Free-tier calls usually answer in 5–20 s, but some
+stall upstream until Google's own 90 s deadline. A timed-out text call is resent once
+unchanged (there is no output to repair), so most stalls cost the user ~30 s instead of a
+failure.
+
+**Further reading is a lesson field, not a block.** `Lesson.resources` holds 2–4
+`{ title, kind, query }` entries. Like video blocks they carry a search phrase, never a
+URL, and render as web-search links. They sit beside `objectives` rather than in
+`content[]` because they describe the lesson instead of teaching it, so narration, quiz
+numbering and the block registry stay untouched. A malformed list never fails a lesson; a
+URL given as a query is converted into search words.
 
 **AI JSON is hardened in layers.** `responseMimeType: 'application/json'` plus a
 `responseSchema` makes markdown-fenced output structurally impossible, but the model can

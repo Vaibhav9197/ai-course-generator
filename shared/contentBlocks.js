@@ -53,7 +53,31 @@ export const COURSE_LIMITS = Object.freeze({
   MAX_MCQ_OPTIONS: 4,
   MIN_MCQS_PER_LESSON: 4,
   MAX_MCQS_PER_LESSON: 5,
+  MIN_RESOURCES: 2,
+  MAX_RESOURCES: 4,
 });
+
+/**
+ * Further-reading resources, stored on the lesson next to `objectives`:
+ *
+ *   { title: string, kind: ResourceKind, query: string }
+ *
+ * They follow the same rule as video blocks: the model names a real source and gives the
+ * *search phrase* that finds it, never a URL, because model-invented links are mostly
+ * dead. The UI turns the query into a web-search link (see resourceSearchUrl).
+ *
+ * Kept off the block array on purpose: resources are a list *about* the lesson rather than
+ * part of its teaching flow, so they don't belong in narration, quiz numbering or the
+ * block registry.
+ */
+export const RESOURCE_KINDS = Object.freeze(['documentation', 'article', 'book', 'course', 'tool']);
+
+/** Kind used when the model returns one outside RESOURCE_KINDS. */
+export const DEFAULT_RESOURCE_KIND = 'article';
+
+export function resourceSearchUrl(query) {
+  return `https://www.google.com/search?q=${encodeURIComponent(String(query ?? ''))}`;
+}
 
 export const SUPPORTED_CODE_LANGUAGES = Object.freeze([
   'javascript', 'typescript', 'jsx', 'python', 'java', 'go', 'rust', 'c', 'cpp',

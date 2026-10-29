@@ -1,5 +1,10 @@
 import { Type } from '@google/genai';
-import { ALL_BLOCK_TYPES, COURSE_LIMITS, SUPPORTED_CODE_LANGUAGES } from '../../shared/contentBlocks.js';
+import {
+  ALL_BLOCK_TYPES,
+  COURSE_LIMITS,
+  RESOURCE_KINDS,
+  SUPPORTED_CODE_LANGUAGES,
+} from '../../shared/contentBlocks.js';
 
 /**
  * Gemini `responseSchema` definitions.
@@ -61,13 +66,29 @@ export const COURSE_OUTLINE_SCHEMA = {
  */
 export const LESSON_SCHEMA = {
   type: Type.OBJECT,
-  required: ['title', 'objectives', 'content'],
+  required: ['title', 'objectives', 'content', 'resources'],
   properties: {
     title: { type: Type.STRING },
     objectives: {
       type: Type.ARRAY,
       description: '3-4 concrete, observable learning objectives.',
       items: { type: Type.STRING },
+    },
+    resources: {
+      type: Type.ARRAY,
+      description: `${COURSE_LIMITS.MIN_RESOURCES}-${COURSE_LIMITS.MAX_RESOURCES} real, well-known sources for further reading.`,
+      items: {
+        type: Type.OBJECT,
+        required: ['title', 'kind', 'query'],
+        properties: {
+          title: { type: Type.STRING, description: 'The name of a real, existing source.' },
+          kind: { type: Type.STRING, enum: [...RESOURCE_KINDS] },
+          query: {
+            type: Type.STRING,
+            description: 'The web search phrase that finds this source. Never a URL.',
+          },
+        },
+      },
     },
     content: {
       type: Type.ARRAY,

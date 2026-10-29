@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { BLOCK_TYPES, COURSE_LIMITS, SUPPORTED_CODE_LANGUAGES } from '../../shared/contentBlocks.js';
+import {
+  BLOCK_TYPES,
+  COURSE_LIMITS,
+  DEFAULT_RESOURCE_KIND,
+  RESOURCE_KINDS,
+  SUPPORTED_CODE_LANGUAGES,
+} from '../../shared/contentBlocks.js';
 
 /**
  * Turning model output into data we are willing to persist.
@@ -235,6 +241,9 @@ const lessonSchema = z.object({
   title: z.string().trim().min(2).max(300).optional(),
   objectives: z.array(z.string().trim().min(3).max(500)).optional().default([]),
   content: z.array(z.unknown()).min(1),
+  // Left loose here and cleaned by normalizeResources: a malformed reading list must never
+  // fail an otherwise good lesson.
+  resources: z.unknown().optional(),
 });
 
 /** A lesson with fewer surviving blocks than this is not worth showing. */
@@ -306,9 +315,84 @@ export function validateLesson(input, { fallbackTitle } = {}) {
       title: parsed.data.title || fallbackTitle,
       objectives: parsed.data.objectives.slice(0, 6),
       content: capMcqs(content),
+      resources: normalizeResources(parsed.data.resources, warnings),
     },
     warnings,
   };
+}
+
+/* ---------------------------------------------------------------- resources */
+
+const resourceSchema = z.object({
+  title: z.string().trim().min(3).max(200),
+  kind: z.string().trim().toLowerCase().optional(),
+  query: z.string().trim().min(2).max(200).optional(),
+});
+
+/**
+ * Cleans the further-reading list. Never fails: the worst outcome is an empty list.
+ *
+ * Each entry is salvaged where possible — a missing query falls back to the title (a
+ * source's name is searchable), an unknown kind becomes the default, and a URL in the
+ * query is turned into search words rather than discarded, since a documentation URL's
+ * host and path usually *are* the right search terms.
+ */
+function normalizeResources(raw, warnings) {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    warnings.push('Resources were not a list; ignored them.');
+    return [];
+  }
+
+  const resources = [];
+  const seen = new Set();
+  let dropped = 0;
+
+  for (const candidate of raw) {
+    const parsed = resourceSchema.safeParse(candidate);
+    if (!parsed.success) {
+      dropped += 1;
+      continue;
+    }
+
+    const { title } = parsed.data;
+    let query = parsed.data.query || title;
+
+    if (/^(https?:\/\/|www\.)/i.test(query)) {
+      query = searchWordsFromUrl(query) || title;
+      warnings.push(`Resource "${truncate(title, 40)}" had a URL as its query; converted it to search words.`);
+    }
+
+    const key = query.toLowerCase().replace(/\s+/g, ' ');
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const kind = RESOURCE_KINDS.includes(parsed.data.kind) ? parsed.data.kind : DEFAULT_RESOURCE_KIND;
+    resources.push({ title, kind, query });
+  }
+
+  if (dropped > 0) warnings.push(`Dropped ${dropped} malformed resource(s).`);
+
+  if (resources.length > COURSE_LIMITS.MAX_RESOURCES) {
+    warnings.push(
+      `Lesson had ${resources.length} resources; kept the first ${COURSE_LIMITS.MAX_RESOURCES}.`,
+    );
+  }
+
+  return resources.slice(0, COURSE_LIMITS.MAX_RESOURCES);
+}
+
+/** "https://react.dev/reference/rules" -> "react.dev reference rules" */
+function searchWordsFromUrl(value) {
+  try {
+    const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    const host = url.hostname.replace(/^www\./i, '');
+    // \p{M} keeps combining marks, which carry meaning in non-Latin scripts.
+    const path = decodeURIComponent(url.pathname).replace(/[^\p{L}\p{N}\p{M}]+/gu, ' ');
+    return `${host} ${path}`.replace(/\s+/g, ' ').trim();
+  } catch {
+    return '';
+  }
 }
 
 function normalizeBlock(block, warnings) {

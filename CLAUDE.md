@@ -30,7 +30,7 @@ Run from the repo root unless noted.
 ```bash
 npm run install:all     # root + server + client
 npm run dev             # API :5000 and client :5173 (Vite proxies /api → :5000)
-npm test                # server (147 tests) then client (23 tests)
+npm test                # server (158 tests) then client (30 tests)
 npm run lint            # ESLint in both packages
 npm run seed            # insert fixture course, no Gemini tokens (-- --force to replace)
 
@@ -72,8 +72,8 @@ Request path: `app.js` (helmet, compression, CORS, JSON 1 MB) → `routes/*` →
 | `utils/ApiError.js` | `ApiError` factories + `asyncHandler` |
 
 Models: `User` (`auth0Sub` unique), `Course` (`creator` = Auth0 `sub`, ordered `modules[]`),
-`Module` (ordered `lessons[]`), `Lesson` (`content[]` Mixed, `isEnriched`, `enrichError`,
-`translations.hinglish`), `VideoCache` (`queryKey` unique, `videoId` nullable).
+`Module` (ordered `lessons[]`), `Lesson` (`content[]` Mixed, `resources[]`, `isEnriched`,
+`enrichError`, `translations.hinglish`), `VideoCache` (`queryKey` unique, `videoId` nullable).
 
 ## Client architecture
 
@@ -99,7 +99,10 @@ calls `warmUpBackend()` to wake Render's cold start.
    `blocksToPlainText`, `client/src/components/blocks/index.js` (+ a component), and
    `client/src/components/PdfLessonSheet.jsx` (which switches on string literals).
 2. **Unknown block types render as `null`, never throw** (`getBlockComponent`).
-3. **Video blocks carry a search `query`, never a URL.** Resolution is server-side.
+3. **Video blocks and lesson `resources` carry a search `query`, never a URL.** Videos are
+   resolved server-side; resources render as web-search links (`resourceSearchUrl`).
+   Resources are a lesson-level field beside `objectives`, not a block: they stay out of
+   narration, quiz numbering and the block registry, and a bad list never fails a lesson.
 4. **Ownership.** Every course read/write filters by `creator: currentUserSub(req)`.
    Lesson-id routes walk lesson → module → course to check ownership. Mismatch → **404,
    never 403**. Identity comes only from the verified JWT `sub`, never from the `User` row.
@@ -126,9 +129,11 @@ calls `warmUpBackend()` to wake Render's cold start.
 16. **TTS input is the narration text alone.** Current Gemini TTS models speak any leading
     style instruction aloud. TTS output may be raw PCM or a full WAV depending on the model:
     always go through `toWav()` (wav.service.js), never `pcmToWav()` directly.
-17. **Every Gemini call carries an `abortSignal` timeout** (`TEXT_TIMEOUT_MS`,
-    `SPEECH_TIMEOUT_MS` in gemini.service.js); timeouts map to 504. Keep 2 × text timeout
-    under the client's 120 s axios timeout.
+17. **Every Gemini call carries an `httpOptions.timeout`** (`TEXT_TIMEOUT_MS` 30 s,
+    `SPEECH_TIMEOUT_MS` 60 s in gemini.service.js); timeouts and Google's own
+    `504 Deadline expired` map to 504, and `generateValidated` resends a timed-out call once.
+    Free-tier calls intermittently stall upstream, so this is load-bearing. Keep
+    2 × text timeout under the client's 120 s axios timeout.
 
 ## Gemini models and quotas
 
