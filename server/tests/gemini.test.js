@@ -24,15 +24,31 @@ const VALID_LESSON = {
     { type: 'paragraph', text: 'Every value in Rust has a single owner.' },
     { type: 'paragraph', text: 'When the owner goes out of scope the value is dropped.' },
     { type: 'video', query: 'rust ownership explained' },
-    {
-      type: 'mcq',
-      question: 'How many owners may a value have?',
-      options: ['Zero', 'Exactly one', 'Any number'],
-      answer: 1,
-      explanation: 'Ownership is unique; moves transfer it.',
-    },
+    ...[1, 2, 3, 4].map((n) => question(n)),
   ],
 };
+
+/** A well-formed quiz block; lessons need at least four of these to pass validation. */
+function question(n) {
+  return {
+    type: 'mcq',
+    question: `Ownership question ${n}?`,
+    options: ['Zero', 'Exactly one', 'Any number'],
+    answer: 1,
+    explanation: 'Ownership is unique; moves transfer it.',
+  };
+}
+
+/** VALID_LESSON's prose with only `count` well-formed questions. */
+function lessonWithQuestions(count) {
+  const prose = VALID_LESSON.content.filter((block) => block.type !== 'mcq');
+  return { ...VALID_LESSON, content: [...prose, ...Array.from({ length: count }, (_, i) => question(i + 1))] };
+}
+
+/** The shape @google/genai throws when httpOptions.timeout fires. */
+function timeoutError() {
+  return Object.assign(new Error('This operation was aborted'), { name: 'AbortError', code: 20 });
+}
 
 /** Builds a fake whose generateContent returns the queued responses in order. */
 function fakeClient(responses) {
@@ -190,10 +206,6 @@ describe('generateCourseOutline', () => {
     expect(client.calls[0].config.abortSignal).toBeUndefined();
   });
 
-  // The shape @google/genai throws when httpOptions.timeout fires.
-  const timeoutError = () =>
-    Object.assign(new Error('This operation was aborted'), { name: 'AbortError', code: 20 });
-
   it('resends a timed-out call unchanged and succeeds on the second try', async () => {
     const client = fakeClient([timeoutError(), VALID_OUTLINE]);
     gemini.__setClientForTests(client);
@@ -227,6 +239,40 @@ describe('generateCourseOutline', () => {
       title: 'Introduction to Rust',
     });
     expect(client.calls).toHaveLength(2);
+  });
+
+  // Real wording returned by the API during a load spike.
+  const highDemand = () =>
+    Object.assign(
+      new Error('{"error":{"code":503,"message":"This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.","status":"UNAVAILABLE"}}'),
+      { status: 503 },
+    );
+
+  it('retries a "high demand" rejection once and succeeds', async () => {
+    const client = fakeClient([highDemand(), VALID_OUTLINE]);
+    gemini.__setClientForTests(client);
+
+    await expect(gemini.generateCourseOutline('Rust')).resolves.toMatchObject({
+      title: 'Introduction to Rust',
+    });
+    expect(client.calls).toHaveLength(2);
+  });
+
+  it('reports a readable "busy" 503 rather than raw upstream JSON when it persists', async () => {
+    gemini.__setClientForTests(fakeClient([highDemand(), highDemand()]));
+
+    const error = await gemini.generateCourseOutline('Rust').catch((err) => err);
+
+    expect(error.status).toBe(503);
+    expect(error.message).toBe('The AI service is busy right now. Please try again in a minute.');
+  });
+
+  it('does not retry a permanent failure such as a rejected key', async () => {
+    const client = fakeClient([new Error('API key not valid. PERMISSION_DENIED'), VALID_OUTLINE]);
+    gemini.__setClientForTests(client);
+
+    await expect(gemini.generateCourseOutline('Rust')).rejects.toMatchObject({ status: 503 });
+    expect(client.calls).toHaveLength(1);
   });
 });
 
@@ -313,26 +359,61 @@ describe('generateLessonContent', () => {
     expect(avoidSection).not.toMatch(/- Ownership/);
   });
 
-  it('salvages a lesson whose questions are malformed', async () => {
-    const partiallyBad = {
-      ...VALID_LESSON,
-      content: [
-        ...VALID_LESSON.content.slice(0, 4),
-        { type: 'mcq', question: 'Bad', options: ['a', 'b'], answer: 9, explanation: 'x' },
-      ],
-    };
+  const context = { courseTitle: 'c', moduleTitle: 'm', lessonTitle: 'Ownership' };
+  const countQuestions = (lesson) => lesson.content.filter((b) => b.type === 'mcq').length;
+  // The real failure seen from Flash-Lite: options missing and no numeric answer.
+  const brokenQuestion = { type: 'mcq', question: 'Broken?', answer: 'two' };
+
+  it('drops a malformed question without a retry when enough good ones remain', async () => {
+    const partiallyBad = { ...VALID_LESSON, content: [...VALID_LESSON.content, brokenQuestion] };
     const client = fakeClient([partiallyBad]);
     gemini.__setClientForTests(client);
 
-    const lesson = await gemini.generateLessonContent({
-      courseTitle: 'c',
-      moduleTitle: 'm',
-      lessonTitle: 'Ownership',
-    });
+    const lesson = await gemini.generateLessonContent(context);
 
-    // Prose survived; only the broken question was dropped. No retry needed.
-    expect(lesson.content).toHaveLength(4);
+    expect(countQuestions(lesson)).toBe(4);
     expect(client.models.generateContent).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks for a repair when too few valid questions survive, and uses the repaired lesson', async () => {
+    const short = { ...lessonWithQuestions(1), content: [...lessonWithQuestions(1).content, brokenQuestion] };
+    const client = fakeClient([short, VALID_LESSON]);
+    gemini.__setClientForTests(client);
+
+    const lesson = await gemini.generateLessonContent(context);
+
+    expect(countQuestions(lesson)).toBe(4);
+    expect(client.calls).toHaveLength(2);
+    // The repair prompt tells the model exactly what a valid question needs.
+    expect(client.calls[1].contents).toMatch(/needs at least 4/);
+    expect(client.calls[1].contents).toMatch(/numeric zero-based "answer"/);
+  });
+
+  it('keeps the better attempt instead of failing when the repair is still short', async () => {
+    const client = fakeClient([lessonWithQuestions(2), lessonWithQuestions(1)]);
+    gemini.__setClientForTests(client);
+
+    const lesson = await gemini.generateLessonContent(context);
+
+    expect(countQuestions(lesson)).toBe(2);
+    expect(lesson.content.some((b) => b.type === 'paragraph')).toBe(true);
+  });
+
+  it('keeps the short first attempt when the repair call itself fails', async () => {
+    gemini.__setClientForTests(fakeClient([lessonWithQuestions(2), timeoutError()]));
+
+    const lesson = await gemini.generateLessonContent(context);
+
+    expect(countQuestions(lesson)).toBe(2);
+  });
+
+  it('never makes more than two calls for one lesson', async () => {
+    const client = fakeClient([lessonWithQuestions(0), lessonWithQuestions(0), VALID_LESSON]);
+    gemini.__setClientForTests(client);
+
+    await gemini.generateLessonContent(context);
+
+    expect(client.models.generateContent).toHaveBeenCalledTimes(2);
   });
 });
 

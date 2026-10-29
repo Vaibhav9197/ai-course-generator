@@ -30,7 +30,7 @@ Run from the repo root unless noted.
 ```bash
 npm run install:all     # root + server + client
 npm run dev             # API :5000 and client :5173 (Vite proxies /api → :5000)
-npm test                # server (158 tests) then client (30 tests)
+npm test                # server (169 tests) then client (30 tests)
 npm run lint            # ESLint in both packages
 npm run seed            # insert fixture course, no Gemini tokens (-- --force to replace)
 
@@ -131,9 +131,14 @@ calls `warmUpBackend()` to wake Render's cold start.
     always go through `toWav()` (wav.service.js), never `pcmToWav()` directly.
 17. **Every Gemini call carries an `httpOptions.timeout`** (`TEXT_TIMEOUT_MS` 30 s,
     `SPEECH_TIMEOUT_MS` 60 s in gemini.service.js); timeouts and Google's own
-    `504 Deadline expired` map to 504, and `generateValidated` resends a timed-out call once.
-    Free-tier calls intermittently stall upstream, so this is load-bearing. Keep
+    `504 Deadline expired` map to 504 (`code: ai_timeout`), `503 high demand` maps to a
+    readable 503 (`code: ai_busy`), and `generateValidated` resends either once. Free-tier
+    calls intermittently stall or get rejected under load, so this is load-bearing. Keep
     2 × text timeout under the client's 120 s axios timeout.
+18. **Lessons are validated with `minQuestions: 4`.** Too few valid MCQs fails validation and
+    triggers the repair prompt; the validator returns the cleaned lesson as a scored
+    `fallback`, and `generateValidated` returns the best fallback rather than erroring. At
+    most two Gemini calls per lesson, ever.
 
 ## Gemini models and quotas
 

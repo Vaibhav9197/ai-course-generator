@@ -127,7 +127,7 @@ fed back to the model.
 ## Testing
 
 ```bash
-npm test             # 158 server + 30 client
+npm test             # 169 server + 30 client
 ```
 
 The server suite runs against `mongodb-memory-server`, so it needs no Atlas cluster and no
