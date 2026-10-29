@@ -9,7 +9,8 @@
     "install:all": "npm install && npm --prefix server install && npm --prefix client install",
     "lint": "npm --prefix server run lint && npm --prefix client run lint",
     "test": "npm --prefix server run test && npm --prefix client run test",
-    "seed": "npm --prefix server run seed"
+    "seed": "npm --prefix server run seed",
+    "package:embarko": "node scripts/package-embarko.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

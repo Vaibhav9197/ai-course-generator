@@ -8,8 +8,9 @@ interactive quizzes), Hinglish audio narration, and PDF export for offline study
 
 | | |
 |---|---|
-| **Live app** | _add your Vercel URL_ |
-| **API** | _add your Render URL_ |
+| **Live app** | <https://ai-course-generator-xi-topaz.vercel.app> (Vercel) |
+| **API** | <https://text-to-learn-backend-kzhq.onrender.com/api/health> (Render) |
+| **Also live on** | <https://ai-course-generator.embarko.app> (Embarko, as a single app) |
 | **Architecture** | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) |
 | **API reference** | [`docs/API.md`](./docs/API.md) |
 | **Deployment guide** | [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) |
@@ -127,7 +128,7 @@ fed back to the model.
 ## Testing
 
 ```bash
-npm test             # 171 server + 30 client
+npm test             # 181 server + 30 client
 ```
 
 The server suite runs against `mongodb-memory-server`, so it needs no Atlas cluster and no
@@ -170,3 +171,7 @@ so the shared contract stays in the build context); CI runs lint and tests on ev
 
 Render's free tier cold-starts in roughly 50 seconds, so the frontend pings `/api/health`
 on load to wake it before the user does anything.
+
+The same code also runs as **one app on Embarko**: `npm run package:embarko` builds the
+client and assembles a single folder in which Express serves the SPA beside the API. See
+[Alternative: Embarko](./docs/DEPLOYMENT.md#alternative-embarko-single-app).
