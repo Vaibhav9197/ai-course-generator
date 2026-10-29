@@ -113,6 +113,22 @@ describe('POST /api/lessons/:id/translate', () => {
     expect(translateMock).toHaveBeenCalledTimes(1);
   });
 
+  it('drops the cached translation when the lesson is regenerated', async () => {
+    const id = await enrichedLessonId();
+    await request(app).post(`/api/lessons/${id}/translate`);
+    clearInFlight();
+
+    const regenerated = await request(app).post(`/api/lessons/${id}/regenerate`);
+    clearInFlight();
+    translateMock.mockResolvedValue('नया अनुवाद');
+    const after = await request(app).post(`/api/lessons/${id}/translate`);
+
+    expect(regenerated.status).toBe(200);
+    // The old Hinglish described the old content; it must not be narrated over the new one.
+    expect(translateMock).toHaveBeenCalledTimes(2);
+    expect(after.body).toMatchObject({ hinglish: 'नया अनुवाद', cached: false });
+  });
+
   it('translates once when two requests race', async () => {
     const id = await enrichedLessonId();
 

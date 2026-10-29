@@ -21,3 +21,6 @@ Thumbs.db
 
 .vercel/
 .vite/
+
+# Local interview notes, not part of the project
+Text-to-Learn Interview Guide.html

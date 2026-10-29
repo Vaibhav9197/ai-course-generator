@@ -24,7 +24,12 @@ async function seed({ force }) {
 
   await connectDb();
 
-  const existing = await Course.find({ creator: SEED_CREATOR }).select('_id title');
+  // Matched on title as well as creator: without Auth0, every course a developer generates is
+  // also owned by SEED_CREATOR (the dev identity), and --force must never delete those.
+  const existing = await Course.find({
+    creator: SEED_CREATOR,
+    title: sampleOutline.title,
+  }).select('_id title');
 
   if (existing.length && !force) {
     console.log(
