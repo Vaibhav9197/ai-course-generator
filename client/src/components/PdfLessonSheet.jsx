@@ -97,6 +97,25 @@ export const PdfLessonSheet = forwardRef(function PdfLessonSheet(
         return <PdfBlock key={index} block={block} number={mcqNumber} />;
       })}
 
+      {lesson.resources?.length > 0 && (
+        <section style={{ marginTop: '28px', breakInside: 'avoid' }}>
+          <h2 style={{ fontSize: '18px', color: COLORS.heading, fontWeight: 700, margin: '0 0 10px' }}>
+            Further reading
+          </h2>
+          {/* A rasterised PDF has no clickable links, so print what to search for. */}
+          <ul style={{ margin: 0, paddingLeft: '20px' }}>
+            {lesson.resources.map((resource, index) => (
+              <li key={index} style={{ marginBottom: '6px' }}>
+                <strong>{resource.title}</strong>
+                <span style={{ color: COLORS.muted }}>
+                  {' '}({resource.kind}) · search for “{resource.query}”
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <footer
         style={{
           marginTop: '36px',

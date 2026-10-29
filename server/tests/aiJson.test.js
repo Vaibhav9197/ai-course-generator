@@ -345,4 +345,77 @@ describe('validateLesson', () => {
   it('fails on completely empty content', () => {
     expect(validateLesson({ content: [] }).ok).toBe(false);
   });
+
+  describe('resources', () => {
+    const withResources = (resources) => validateLesson({ content: goodContent, resources });
+
+    it('keeps well-formed resources unchanged', () => {
+      const resources = [
+        { title: 'Kubernetes docs: Pods', kind: 'documentation', query: 'kubernetes.io pods concept' },
+        { title: 'Kubernetes in Action', kind: 'book', query: 'Kubernetes in Action Marko Luksa' },
+      ];
+      const result = withResources(resources);
+
+      expect(result.ok).toBe(true);
+      expect(result.value.resources).toEqual(resources);
+      expect(result.warnings).toEqual([]);
+    });
+
+    it('returns an empty list, with no warning, when the model gives none', () => {
+      const result = validateLesson({ content: goodContent });
+
+      expect(result.value.resources).toEqual([]);
+      expect(result.warnings).toEqual([]);
+    });
+
+    it('never fails a good lesson because the reading list is malformed', () => {
+      const result = withResources('see the docs');
+
+      expect(result.ok).toBe(true);
+      expect(result.value.content).toHaveLength(goodContent.length);
+      expect(result.value.resources).toEqual([]);
+    });
+
+    it('drops individual malformed entries and keeps the rest', () => {
+      const result = withResources([
+        { kind: 'book' },
+        'just a string',
+        { title: 'Kubernetes docs: Pods', kind: 'documentation', query: 'kubernetes.io pods' },
+      ]);
+
+      expect(result.value.resources).toHaveLength(1);
+      expect(result.warnings.join(' ')).toMatch(/Dropped 2 malformed resource/);
+    });
+
+    it('turns a URL query into search words instead of linking to it', () => {
+      const result = withResources([
+        { title: 'Kubernetes docs: Pods', kind: 'documentation', query: 'https://kubernetes.io/docs/concepts/workloads/pods/' },
+      ]);
+
+      expect(result.value.resources[0].query).toBe('kubernetes.io docs concepts workloads pods');
+      expect(result.warnings.join(' ')).toMatch(/URL as its query/);
+    });
+
+    it('searches by title when the query is missing', () => {
+      const result = withResources([{ title: 'The Kubernetes Book', kind: 'book' }]);
+      expect(result.value.resources[0].query).toBe('The Kubernetes Book');
+    });
+
+    it('maps an unknown kind to the default rather than dropping the entry', () => {
+      const result = withResources([{ title: 'kubectl', kind: 'cli', query: 'kubectl reference' }]);
+      expect(result.value.resources[0].kind).toBe('article');
+    });
+
+    it('removes duplicate queries and caps the list', () => {
+      const many = ['a one', 'b two', 'c three', 'd four', 'e five'].map((query) => ({
+        title: `Source ${query}`,
+        kind: 'article',
+        query,
+      }));
+      const result = withResources([...many, { title: 'Again', kind: 'article', query: 'A  ONE' }]);
+
+      expect(result.value.resources.map((r) => r.query)).toEqual(['a one', 'b two', 'c three', 'd four']);
+      expect(result.warnings.join(' ')).toMatch(/kept the first 4/);
+    });
+  });
 });

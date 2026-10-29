@@ -1,7 +1,17 @@
 import mongoose from 'mongoose';
 import { registerModel } from './registerModel.js';
 import { serializePlugin } from './plugins/serialize.js';
-import { isBlockType } from '../../shared/contentBlocks.js';
+import { isBlockType, RESOURCE_KINDS } from '../../shared/contentBlocks.js';
+
+/** One further-reading suggestion. A search query, never a URL — see shared/contentBlocks.js. */
+const resourceSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true, trim: true },
+    kind: { type: String, enum: RESOURCE_KINDS, required: true },
+    query: { type: String, required: true, trim: true },
+  },
+  { _id: false },
+);
 
 /**
  * A single lesson — the unit of AI generation and the unit of caching.
@@ -17,6 +27,9 @@ const lessonSchema = new mongoose.Schema(
 
     /** "By the end of this lesson you will be able to…" bullets. */
     objectives: [{ type: String, trim: true }],
+
+    /** Further reading. Empty for lessons generated before this field existed. */
+    resources: { type: [resourceSchema], default: [] },
 
     /**
      * Ordered content blocks — see shared/contentBlocks.js for the union.
@@ -67,9 +80,14 @@ const lessonSchema = new mongoose.Schema(
 lessonSchema.plugin(serializePlugin);
 
 /** Marks the lesson enriched and clears any previous failure in one write. */
-lessonSchema.methods.applyEnrichment = function applyEnrichment({ objectives, content }) {
+lessonSchema.methods.applyEnrichment = function applyEnrichment({
+  objectives,
+  content,
+  resources,
+}) {
   this.objectives = objectives ?? [];
   this.content = content ?? [];
+  this.resources = resources ?? [];
   this.isEnriched = true;
   this.enrichError = undefined;
   return this.save();

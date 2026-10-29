@@ -41,6 +41,10 @@ const LESSON = {
     { type: 'code', language: 'go', text: 'package main\n\nfunc main() {}' },
     { type: 'video', query: 'go syntax basics' },
   ],
+  resources: [
+    { title: 'A Tour of Go', kind: 'course', query: 'A Tour of Go' },
+    { title: 'Effective Go', kind: 'documentation', query: 'go.dev Effective Go' },
+  ],
 };
 
 let app;
@@ -158,6 +162,17 @@ describe('GET lesson (enrich on read)', () => {
     expect(res.status).toBe(200);
     expect(res.body.lesson.isEnriched).toBe(true);
     expect(res.body.lesson.content).toHaveLength(4);
+    expect(lessonMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists the further-reading list and serves it from the cache', async () => {
+    const id = await courseId();
+    const url = `/api/courses/${id}/module/0/lesson/0`;
+
+    await request(app).get(url);
+    const cached = await request(app).get(url);
+
+    expect(cached.body.lesson.resources).toEqual(LESSON.resources);
     expect(lessonMock).toHaveBeenCalledTimes(1);
   });
 
